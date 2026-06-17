@@ -48,3 +48,6 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
         raise HTTPException(501, "Fix generation available in Phase 2")
 
     return app
+
+# Module-level instance for uvicorn
+app = create_app()
