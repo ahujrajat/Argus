@@ -61,6 +61,15 @@ class SkillStatus(str, Enum):
     disabled = "disabled"
 
 
+class SecurityApproach(str, Enum):
+    penetration_testing = "penetration_testing"
+    adversary_emulation = "adversary_emulation"
+    breach_and_attack_simulation = "breach_and_attack_simulation"
+    assumed_breach = "assumed_breach"
+    blue_team = "blue_team"
+    purple_team = "purple_team"
+
+
 class Location(BaseModel):
     file: str
     line_start: int
@@ -73,6 +82,7 @@ class Scan(BaseModel):
     target_ref: str
     pipeline_config_id: UUID
     mode: ScanMode
+    approach: SecurityApproach = SecurityApproach.penetration_testing
     status: ScanStatus = ScanStatus.pending
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None

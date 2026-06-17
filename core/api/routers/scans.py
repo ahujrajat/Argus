@@ -7,7 +7,7 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from core.api.deps import get_db
 from core.db.tables import ScanRow, FindingRow
-from core.model.entities import ScanMode
+from core.model.entities import ScanMode, SecurityApproach
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 
@@ -15,6 +15,7 @@ router = APIRouter(prefix="/scans", tags=["scans"])
 class TriggerScanRequest(BaseModel):
     target_ref: str
     mode: ScanMode = ScanMode.at_rest
+    approach: SecurityApproach = SecurityApproach.penetration_testing
     pipeline_config_name: str = "full-scan"
 
 
@@ -23,7 +24,7 @@ async def list_scans(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(ScanRow).order_by(ScanRow.started_at.desc()).limit(50))
     rows = result.scalars().all()
     return [{"id": r.id, "target_ref": r.target_ref, "status": r.status,
-             "mode": r.mode, "cost_usd": r.cost_usd} for r in rows]
+             "mode": r.mode, "approach": r.approach, "cost_usd": r.cost_usd} for r in rows]
 
 
 @router.post("/", status_code=202)
@@ -44,6 +45,7 @@ async def trigger_scan(
         target_ref=body.target_ref,
         pipeline_config_id=str(uuid4()),
         mode=body.mode.value,
+        approach=body.approach.value,
         status="pending",
         started_at=datetime.now(timezone.utc),
     )
@@ -51,7 +53,7 @@ async def trigger_scan(
     await db.flush()
 
     scan = Scan(id=scan_id, target_ref=body.target_ref,
-                pipeline_config_id=scan_id, mode=body.mode)
+                pipeline_config_id=scan_id, mode=body.mode, approach=body.approach)
 
     from core.governance.gate import GovernanceGate
     from core.agents.orchestrator import Orchestrator
@@ -76,5 +78,5 @@ async def get_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="Scan not found")
     return {"id": row.id, "target_ref": row.target_ref, "status": row.status,
-            "mode": row.mode, "cost_usd": row.cost_usd,
+            "mode": row.mode, "approach": row.approach, "cost_usd": row.cost_usd,
             "started_at": row.started_at, "finished_at": row.finished_at}

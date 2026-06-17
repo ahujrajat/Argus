@@ -28,6 +28,7 @@ class ScanRow(Base):
     target_ref = Column(String, nullable=False)
     pipeline_config_id = Column(UUID(as_uuid=False), nullable=False)
     mode = Column(String, nullable=False)
+    approach = Column(String, nullable=False, default="penetration_testing")
     status = Column(String, nullable=False, default="pending")
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
