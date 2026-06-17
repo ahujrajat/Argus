@@ -1,0 +1,31 @@
+name: real-time
+version: 1
+is_default: true
+mode: real_time
+nodes:
+  - id: ingestion
+    agent: IngestionAgent
+    tier: fast
+    budget_pct: 5
+  - id: sast
+    agent: SemgrepAdapter
+    tier: none
+    budget_pct: 0
+  - id: triage
+    agent: TriageAgent
+    tier: fast
+    budget_pct: 60
+  - id: explainer
+    agent: ExplainerAgent
+    tier: fast
+    budget_pct: 25
+edges:
+  - from: ingestion
+    to: sast
+    condition: null
+  - from: sast
+    to: triage
+    condition: null
+  - from: triage
+    to: explainer
+    condition: null

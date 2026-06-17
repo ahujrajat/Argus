@@ -395,6 +395,7 @@ git commit -m "feat: monorepo scaffold, config files, docker-compose"
 
 **Interfaces:**
 - Produces: `Scan`, `Finding`, `Fix`, `PatternFinding`, `CostLedgerEntry`, `AuditLogEntry`, `PipelineConfig`, `TargetAuthorization`, `SkillMeta`, `Location`, `ScanMode`, `ScanStatus`, `Severity`, `FindingStatus`, `FixStatus`, `ModelTier` — all Pydantic v2 BaseModel subclasses importable from `core.model.entities`
+- Note: `SecurityApproach` enum and `Scan.approach` field are added by the security-approaches addendum plan (`2026-06-17-phase1-security-approaches.md`). Implement this task first as written, then the addendum patches it.
 
 - [ ] **Step 1: Write failing test**
 
