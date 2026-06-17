@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, FindingDTO } from "../../api/client";
+import { api, FindingDTO, APPROACH_LABELS } from "../../api/client";
 import { FindingDetail } from "./FindingDetail";
+import { TriggerScanModal } from "../scans/TriggerScanModal";
 
 const SEVERITY_COLOR: Record<string, string> = {
   critical: "bg-red-600",
@@ -13,9 +14,8 @@ const SEVERITY_COLOR: Record<string, string> = {
 
 export function FindingsPage() {
   const [selectedScanId, setSelectedScanId] = useState<string | null>(null);
-  const [selectedFinding, setSelectedFinding] = useState<FindingDTO | null>(
-    null
-  );
+  const [selectedFinding, setSelectedFinding] = useState<FindingDTO | null>(null);
+  const [showTrigger, setShowTrigger] = useState(false);
 
   const { data: scans } = useQuery({
     queryKey: ["scans"],
@@ -32,21 +32,34 @@ export function FindingsPage() {
       <div className="flex-1 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Findings</h1>
-          <select
-            className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm"
-            value={selectedScanId ?? ""}
-            onChange={(e) => {
-              setSelectedScanId(e.target.value);
-              setSelectedFinding(null);
-            }}
-          >
-            <option value="">Select a scan…</option>
-            {scans?.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.target_ref} — {s.status} — ${s.cost_usd.toFixed(3)}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-3">
+            <select
+              className="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm"
+              value={selectedScanId ?? ""}
+              onChange={(e) => {
+                setSelectedScanId(e.target.value);
+                setSelectedFinding(null);
+              }}
+            >
+              <option value="">Select a scan…</option>
+              {scans?.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.target_ref} — {s.status} — ${s.cost_usd.toFixed(3)}
+                </option>
+              ))}
+            </select>
+            {scans?.find((s) => s.id === selectedScanId)?.approach && (
+              <span className="px-2 py-0.5 rounded-full bg-gray-800 border border-gray-700 text-xs text-gray-300">
+                {APPROACH_LABELS[scans!.find((s) => s.id === selectedScanId)!.approach]}
+              </span>
+            )}
+            <button
+              onClick={() => setShowTrigger(true)}
+              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-colors"
+            >
+              + New Scan
+            </button>
+          </div>
         </div>
 
         {findings && findings.length === 0 && (
@@ -99,6 +112,8 @@ export function FindingsPage() {
           onClose={() => setSelectedFinding(null)}
         />
       )}
+
+      {showTrigger && <TriggerScanModal onClose={() => setShowTrigger(false)} />}
     </div>
   );
 }

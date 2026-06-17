@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import structlog
 from core.agents.base import AgentContext, AgentOutput
-from core.agents.prompts.triage import TRIAGE_SYSTEM, TRIAGE_USER_TEMPLATE
+from core.agents.prompts.triage import TRIAGE_USER_TEMPLATE, get_triage_system
 from core.model.entities import Finding
 from core.model.redaction import redact
 
@@ -51,7 +51,7 @@ class TriageAgent:
         result = await ctx.gate.complete(
             task_type="triage",
             messages=[
-                {"role": "system", "content": TRIAGE_SYSTEM},
+                {"role": "system", "content": get_triage_system(ctx.approach)},
                 {"role": "user", "content": user_msg},
             ],
             agent_id=self.agent_id,

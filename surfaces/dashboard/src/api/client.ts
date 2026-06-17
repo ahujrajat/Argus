@@ -1,5 +1,31 @@
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+export type SecurityApproach =
+  | "penetration_testing"
+  | "adversary_emulation"
+  | "breach_and_attack_simulation"
+  | "assumed_breach"
+  | "blue_team"
+  | "purple_team";
+
+export const APPROACH_LABELS: Record<SecurityApproach, string> = {
+  penetration_testing: "Penetration Testing",
+  adversary_emulation: "Adversary Emulation",
+  breach_and_attack_simulation: "Breach & Attack Simulation",
+  assumed_breach: "Assumed Breach",
+  blue_team: "Blue Team",
+  purple_team: "Purple Team",
+};
+
+export const APPROACH_DESCRIPTIONS: Record<SecurityApproach, string> = {
+  penetration_testing: "Breadth-first: find and exploit all vulnerabilities in scope",
+  adversary_emulation: "Replay threat actor TTPs mapped to MITRE ATT&CK",
+  breach_and_attack_simulation: "Validate controls: would WAF/SIEM/EDR catch this?",
+  assumed_breach: "Post-compromise: lateral movement, privilege escalation, persistence",
+  blue_team: "Defensive: detection engineering, hardening, control gap analysis",
+  purple_team: "Red + blue feedback loop: every attack paired with a detection rule",
+};
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -38,6 +64,7 @@ export interface ScanDTO {
   target_ref: string;
   status: string;
   mode: string;
+  approach: SecurityApproach;
   cost_usd: number;
   started_at: string | null;
 }
@@ -57,7 +84,7 @@ export interface CostEntryDTO {
 
 export const api = {
   listScans: () => get<ScanDTO[]>("/api/v1/scans/"),
-  triggerScan: (body: { target_ref: string; mode?: string }) =>
+  triggerScan: (body: { target_ref: string; mode?: string; approach?: SecurityApproach }) =>
     post<{ scan_id: string }>("/api/v1/scans/", body),
   getScanFindings: (scanId: string) =>
     get<FindingDTO[]>(`/api/v1/scans/${scanId}/findings`),

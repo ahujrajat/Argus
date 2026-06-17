@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import structlog
 from core.agents.base import AgentContext, AgentOutput
-from core.agents.prompts.explainer import EXPLAINER_SYSTEM, EXPLAINER_USER_TEMPLATE
+from core.agents.prompts.explainer import EXPLAINER_USER_TEMPLATE, get_explainer_system
 from core.model.redaction import redact
 
 log = structlog.get_logger()
@@ -40,7 +40,7 @@ class ExplainerAgent:
         result = await ctx.gate.complete(
             task_type="explanation",
             messages=[
-                {"role": "system", "content": EXPLAINER_SYSTEM},
+                {"role": "system", "content": get_explainer_system(ctx.approach)},
                 {"role": "user", "content": user_msg},
             ],
             agent_id=self.agent_id,

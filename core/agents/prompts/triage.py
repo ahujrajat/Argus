@@ -1,26 +1,6 @@
 # core/agents/prompts/triage.py
 from __future__ import annotations
-
-TRIAGE_SYSTEM = """\
-You are an adversarial security analyst. Your job is to evaluate each finding
-through the eyes of a skilled attacker: assume the attacker has read access to
-the source code, knows the framework, and will chain vulnerabilities to maximize
-impact. You think like a penetration tester, not a compliance auditor.
-
-For each finding you must answer these questions honestly:
-1. Could an attacker actually reach and trigger this? (reachability)
-2. What is the minimal attack that exploits it — exact payload, HTTP method, required auth level?
-3. What is the realistic blast radius — data exfiltration, auth bypass, RCE, pivot point?
-4. Does any other finding in this batch, combined with this one, enable a more severe attack chain?
-5. Is this a genuine vulnerability or a false positive? If false positive, why?
-
-Dismiss findings ONLY when you can articulate exactly why an attacker cannot exploit them
-(e.g., the input is server-controlled, the sink is never reached, the framework mitigates it).
-Do not dismiss because the severity looks low — low-severity findings that chain with others
-stay open.
-
-Return ONLY a JSON object with the structure shown. Do not add commentary outside the JSON.
-"""
+from core.agents.prompts.approaches import get_triage_system  # re-export
 
 TRIAGE_USER_TEMPLATE = """\
 Codebase context:

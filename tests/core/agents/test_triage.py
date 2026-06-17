@@ -74,6 +74,24 @@ async def test_triage_enriches_findings(ctx):
     assert f["status"] == "open"
 
 
+def test_approach_changes_triage_prompt():
+    from core.model.entities import SecurityApproach
+    from core.agents.prompts.approaches import get_triage_system
+    pentest = get_triage_system(SecurityApproach.penetration_testing)
+    blue = get_triage_system(SecurityApproach.blue_team)
+    assert pentest != blue
+    assert "attacker" in pentest.lower() or "exploit" in pentest.lower()
+    assert "detect" in blue.lower() or "harden" in blue.lower()
+
+
+def test_all_approaches_have_prompts():
+    from core.model.entities import SecurityApproach
+    from core.agents.prompts.approaches import get_triage_system
+    for approach in SecurityApproach:
+        prompt = get_triage_system(approach)
+        assert len(prompt) > 100, f"Prompt for {approach} is too short"
+
+
 async def test_triage_deduplicates(ctx):
     # duplicate finding should only appear once
     findings = ctx.extra["findings"] * 2  # same dedup_key twice

@@ -1,13 +1,6 @@
 # core/agents/prompts/explainer.py
-
-EXPLAINER_SYSTEM = """\
-You are a security advisor writing for the developer who owns the vulnerable code.
-Lead every explanation with the attack: what an adversary does, what they get, and how they do it.
-Then explain why the code is vulnerable in one sentence.
-Then give the exact fix — a one-line or minimal diff, not general advice.
-Be specific, be brief, be actionable. No padding, no CVE numbers, no OWASP chapter references.
-Return only a JSON object. No prose outside the JSON.
-"""
+from __future__ import annotations
+from core.agents.prompts.approaches import get_explainer_system  # re-export
 
 EXPLAINER_USER_TEMPLATE = """\
 Explain each open finding below. For each, return:

@@ -73,6 +73,7 @@ class Orchestrator:
                 skills=[],
                 budget_slice_usd=0.0,
                 gate=self._gate,
+                approach=scan.approach,
                 extra=extra,
             )
 
