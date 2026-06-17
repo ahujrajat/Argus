@@ -5,91 +5,94 @@ interface Props {
   onClose: () => void;
 }
 
+const SEVERITY_STYLE: Record<string, string> = {
+  critical: "bg-red-50 text-red-700 border border-red-200",
+  high:     "bg-orange-50 text-orange-700 border border-orange-200",
+  medium:   "bg-amber-50 text-amber-700 border border-amber-200",
+  low:      "bg-blue-50 text-blue-700 border border-blue-200",
+  info:     "bg-gray-100 text-gray-600 border border-gray-200",
+};
+
 export function FindingDetail({ finding, onClose }: Props) {
   return (
-    <div className="w-96 bg-gray-900 border border-gray-700 rounded-xl p-6 flex flex-col gap-4 overflow-auto">
-      <div className="flex justify-between items-start">
-        <h2 className="font-mono text-sm font-bold text-gray-200 break-all">
-          {finding.rule_id}
-        </h2>
+    <div className="w-[400px] flex-shrink-0 bg-white shadow-card-hover rounded-xl flex flex-col overflow-hidden border border-gray-100">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono text-xs text-gray-400 mb-1">Rule ID</p>
+          <h2 className="font-mono text-sm font-bold text-gray-900 break-all leading-snug">
+            {finding.rule_id}
+          </h2>
+        </div>
         <button
           onClick={onClose}
-          className="text-gray-600 hover:text-gray-300 text-xl leading-none"
+          className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 hover:text-gray-700 transition-colors text-lg leading-none"
         >
           ×
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-2 text-xs">
-        <Tag label={finding.severity.toUpperCase()} color="bg-orange-600" />
-        {finding.cwe && <Tag label={finding.cwe} color="bg-gray-700" />}
-        {finding.owasp_category && (
-          <Tag label={`OWASP ${finding.owasp_category}`} color="bg-gray-700" />
-        )}
-        <Tag
-          label={`conf ${(finding.confidence * 100).toFixed(0)}%`}
-          color="bg-gray-800"
-        />
-        <Tag
-          label={`exploit ${(finding.exploit_likelihood * 100).toFixed(0)}%`}
-          color="bg-gray-800"
-        />
-      </div>
-
-      <div>
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-          Location
-        </h3>
-        <p className="font-mono text-sm text-indigo-400">
-          {finding.location.file}:{finding.location.line_start}
-        </p>
-        {finding.location.snippet && (
-          <pre className="mt-2 p-3 bg-gray-800 rounded text-xs text-gray-300 overflow-x-auto whitespace-pre-wrap">
-            {finding.location.snippet}
-          </pre>
-        )}
-      </div>
-
-      {finding.reachability && (
-        <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-            Reachability
-          </h3>
-          <p className="text-sm text-gray-300">{finding.reachability}</p>
+      <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-5">
+        {/* Metadata chips */}
+        <div className="flex flex-wrap gap-1.5">
+          <Chip label={finding.severity.toUpperCase()} className={SEVERITY_STYLE[finding.severity] ?? SEVERITY_STYLE.info} />
+          {finding.cwe && <Chip label={finding.cwe} className="bg-gray-100 text-gray-600 border border-gray-200" />}
+          {finding.owasp_category && <Chip label={`OWASP ${finding.owasp_category}`} className="bg-gray-100 text-gray-600 border border-gray-200" />}
+          <Chip label={`Conf ${(finding.confidence * 100).toFixed(0)}%`} className="bg-gray-50 text-gray-500 border border-gray-200" />
+          <Chip label={`Exploit ${(finding.exploit_likelihood * 100).toFixed(0)}%`} className="bg-gray-50 text-gray-500 border border-gray-200" />
         </div>
-      )}
 
-      {finding.attack_scenario && (
-        <div>
-          <h3 className="text-xs font-semibold text-red-400 uppercase tracking-wide mb-1">
-            Attack Scenario
-          </h3>
-          <p className="text-sm text-gray-200 leading-relaxed">
-            {finding.attack_scenario}
+        {/* Location */}
+        <Section label="Location">
+          <p className="font-mono text-sm font-medium" style={{ color: "#A100FF" }}>
+            {finding.location.file}:{finding.location.line_start}
           </p>
-        </div>
-      )}
+          {finding.location.snippet && (
+            <pre className="mt-2 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 font-mono overflow-x-auto whitespace-pre-wrap leading-relaxed">
+              {finding.location.snippet}
+            </pre>
+          )}
+        </Section>
 
-      {finding.explanation && (
-        <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-            Explanation & Fix
-          </h3>
-          <p className="text-sm text-gray-300 leading-relaxed">
-            {finding.explanation}
-          </p>
-        </div>
-      )}
+        {/* Reachability */}
+        {finding.reachability && (
+          <Section label="Reachability">
+            <p className="text-sm text-gray-700 leading-relaxed">{finding.reachability}</p>
+          </Section>
+        )}
+
+        {/* Attack scenario */}
+        {finding.attack_scenario && (
+          <div>
+            <p className="text-[11px] font-semibold text-red-600 uppercase tracking-wide mb-2">Attack Scenario</p>
+            <div className="px-3 py-3 bg-red-50 border-l-[3px] border-red-400 rounded-r-lg">
+              <p className="text-sm text-red-800 leading-relaxed">{finding.attack_scenario}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Explanation */}
+        {finding.explanation && (
+          <Section label="Explanation & Fix">
+            <p className="text-sm text-gray-700 leading-relaxed">{finding.explanation}</p>
+          </Section>
+        )}
+      </div>
     </div>
   );
 }
 
-function Tag({ label, color }: { label: string; color: string }) {
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <span
-      className={`${color} text-white px-2 py-0.5 rounded text-xs font-medium`}
-    >
-      {label}
-    </span>
+    <div>
+      <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function Chip({ label, className }: { label: string; className: string }) {
+  return (
+    <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${className}`}>{label}</span>
   );
 }
