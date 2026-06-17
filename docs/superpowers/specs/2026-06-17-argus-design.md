@@ -17,7 +17,7 @@ Argus is a provider-agnostic, cost-aware security platform that orchestrates det
 | Question | Decision | Rationale |
 |---|---|---|
 | Core stack | Python + TypeScript surfaces | Security ecosystem is Python-native; TypeScript for React dashboard and VS Code extension |
-| LLM orchestration | LiteLLM (provider-agnostic) | Supports Anthropic, OpenAI, Azure OpenAI, Vertex AI, Ollama; unified token counting and cost callbacks |
+| LLM orchestration | finRouter (sidecar gateway) | TypeScript library wrapping provider calls with enterprise FinOps, AES-256-GCM key encryption, hierarchical budget enforcement, and sub-5ms overhead. Wrapped in a thin Fastify HTTP gateway (`surfaces/finrouter-gateway/`) so the Python core calls it via HTTP. |
 | Data residency | Self-hosted, privacy-first | Zero-retention headers per provider where supported; source code never leaves operator boundary |
 | VCS integration | GitHub + GitLab simultaneously | VCS abstraction layer; both adapters built to the same interface |
 | Budget caps | Configurable at setup, conservative defaults | $5/scan, $200/month; soft warning at 80%, hard stop at 100% |
@@ -92,19 +92,24 @@ The orchestrator resolves the pipeline config, topologically sorts nodes, and ex
 
 ### 4.2 GovernanceGate
 
-Single chokepoint for all model calls:
+Single chokepoint for all model calls. The Python core never calls LLM providers directly — all calls route through the finRouter Gateway sidecar.
 
-1. Check remaining budget → raise `BudgetExceeded` if over hard limit
+1. Check remaining scan budget (Argus per-scan budget) → raise `BudgetExceeded` if over hard limit
 2. Model router → pick `(provider, model_id)` from task type + node tier config
-3. Build LiteLLM call with zero-retention flag if provider supports it
-4. Execute via LiteLLM
-5. Record `CostLedgerEntry` via LiteLLM success callback
-6. Emit SSE event for live dashboard trace
-7. Return completion
+3. POST to `http://finrouter-gateway/chat` via `httpx` with model, messages, and `x-zero-retention` flag
+4. finRouter Gateway: enforces org/team-level budget cascade, encrypts keys, routes to provider, injects zero-retention header where supported
+5. GovernanceGate reads usage metadata from gateway response (`tokens_in`, `tokens_out`, `cache_hit`, `cost_usd`)
+6. Record `CostLedgerEntry` (scan-level attribution)
+7. Emit SSE event for live dashboard trace
+8. Return completion
+
+**Two-layer cost governance:**
+- finRouter layer: org → department → team → user hierarchy, block/downgrade/warn actions, AES-256-GCM key management
+- Argus layer: per-scan token budget and CostLedger for finding/fix-level attribution and dashboard reporting
 
 ### 4.3 Model Router
 
-Config-driven, reading `config/model_tiers.yaml`. No model name appears in Python source.
+Config-driven, reading `config/model_tiers.yaml`. No model name appears in Python source. The router selects a `(provider, model_id)` pair and passes it to `GovernanceGate`, which sends it to the finRouter Gateway. finRouter re-validates against its own routing rules before forwarding.
 
 ```yaml
 providers:
@@ -114,15 +119,15 @@ tiers:
   fast:
     anthropic:  claude-haiku-4-5-20251001
     openai:     gpt-4o-mini
-    vertex_ai:  gemini-1.5-flash
+    google:     gemini-2.0-flash
   balanced:
     anthropic:  claude-sonnet-4-6
     openai:     gpt-4o
-    vertex_ai:  gemini-1.5-pro
+    google:     gemini-2.0-pro
   top:
     anthropic:  claude-opus-4-8
     openai:     o1
-    vertex_ai:  gemini-1.5-ultra
+    google:     gemini-2.5-pro
 
 escalation_rules:
   - condition: "confidence < 0.5"
@@ -132,6 +137,8 @@ escalation_rules:
     from_tier: balanced
     to_tier: top
 ```
+
+Note: finRouter supports Anthropic, OpenAI, Gemini, Mistral, and Groq. Model strings in `model_tiers.yaml` must match finRouter's provider identifiers.
 
 Default tier per task type:
 
@@ -330,9 +337,12 @@ argus/
     standards/        # owasp-top-10, cwe-mapping, sarif
     meta/             # skill-creator
   surfaces/
-    dashboard/        # React + TypeScript + Vite
-    vscode-extension/ # TypeScript extension
-    ci/               # CI step + severity gate shell/YAML
+    dashboard/          # React + TypeScript + Vite
+    vscode-extension/   # TypeScript extension
+    ci/                 # CI step + severity gate shell/YAML
+    finrouter-gateway/  # Fastify HTTP wrapper around finRouter npm library
+                        # Exposes POST /chat, GET /cost/summary
+                        # Adds zero-retention header forwarding, per-call usage response
   sandbox/            # container definitions for isolated execution
   evals/              # benchmark repos + harness
   docs/
@@ -356,7 +366,8 @@ argus/
 **Core:**
 - Full monorepo scaffold
 - `PipelineConfig` model + default configs
-- `GovernanceGate` with LiteLLM, model router, zero-retention headers
+- finRouter Gateway sidecar (`surfaces/finrouter-gateway/`) — Fastify service wrapping finRouter, exposes `POST /chat` and `GET /cost/summary`, adds zero-retention header forwarding and per-call usage in response body
+- `GovernanceGate` — calls finRouter Gateway via httpx, model router, per-scan budget guard
 - `CostLedgerEntry` writer via LiteLLM callbacks
 - Per-scan token budget guard
 - `IngestionAgent` — language/framework detection, repo map, `CodeContext`
