@@ -1,0 +1,31 @@
+name: dast-scan
+version: 1
+is_default: false
+mode: at_rest
+nodes:
+  - id: dast
+    agent: NucleiAdapter
+    tier: none
+    budget_pct: 0
+  - id: triage
+    agent: TriageAgent
+    tier: balanced
+    budget_pct: 55
+  - id: explainer
+    agent: ExplainerAgent
+    tier: fast
+    budget_pct: 35
+  - id: pattern_analysis
+    agent: PatternAgent
+    tier: balanced
+    budget_pct: 10
+edges:
+  - from: dast
+    to: triage
+    condition: null
+  - from: triage
+    to: explainer
+    condition: null
+  - from: triage
+    to: pattern_analysis
+    condition: null
