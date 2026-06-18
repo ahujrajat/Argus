@@ -378,6 +378,25 @@ Risk score formula: `critical×10 + high×5 + medium×2 + low×1`.
 GET    /metrics    Prometheus text metrics (counter: scans, findings, cost; histogram: duration)
 ```
 
+### Policies (Phase 11)
+```
+POST   /policies                             Create a security policy
+GET    /policies                             List policies (?active_only=true)
+GET    /policies/{id}                        Policy detail
+DELETE /policies/{id}                        Delete a policy
+POST   /policies/{id}/evaluate/{scan_id}     Evaluate a scan against a policy (persists result)
+GET    /policies/evaluations/scan/{scan_id}  All evaluations for a scan
+```
+
+Policy fields: `max_critical`, `max_high`, `max_medium`, `max_low`, `max_risk_score`, `blocked_owasp` (list), `blocked_cwe` (list), `block_on_any_critical` (bool). All threshold fields are optional — omitting a field means that constraint is not enforced.
+
+### Bulk Finding Operations (Phase 11)
+```
+POST   /findings/bulk-suppress   Suppress up to 500 findings by fingerprint (creates SuppressionRuleRow per finding)
+POST   /findings/bulk-dismiss    Mark up to 500 findings as dismissed
+POST   /findings/bulk-assign     Assign up to 500 findings to a user/team
+```
+
 ---
 
 ## Development
@@ -415,6 +434,30 @@ alembic upgrade head
 5. Add a pipeline config YAML referencing the agent name
 6. Write tests in `tests/core/scanners/test_my_tool.py`
 
+### CI Gate
+
+Wire Argus into CI/CD pipelines using `scripts/ci-gate.sh` (Linux/macOS) or `scripts/ci-gate.bat` (Windows):
+
+```bash
+# Evaluate a scan against all active policies (exits non-zero on failure)
+ARGUS_API_URL=https://argus.internal \
+ARGUS_API_KEY=argus_xxxx \
+./scripts/ci-gate.sh --scan-id <uuid>
+
+# Evaluate against a specific policy
+./scripts/ci-gate.sh --scan-id <uuid> --policy-id <policy-uuid>
+```
+
+GitHub Actions example:
+```yaml
+- name: Argus security gate
+  run: |
+    ./scripts/ci-gate.sh --scan-id ${{ steps.scan.outputs.scan_id }}
+  env:
+    ARGUS_API_URL: ${{ secrets.ARGUS_URL }}
+    ARGUS_API_KEY: ${{ secrets.ARGUS_KEY }}
+```
+
 ### Windows `.bat` equivalents
 
 Every shell script in this repo has a corresponding `.bat` file for Windows. When adding new scripts, create both `scripts/my-script.sh` and `scripts/my-script.bat`.
@@ -444,7 +487,7 @@ tests/
 
 Run without a database:
 ```bash
-pytest --ignore=tests/e2e -q   # 307 tests
+pytest --ignore=tests/e2e -q   # 337 tests
 ```
 
 Run everything (needs `docker compose up -d`):
@@ -488,6 +531,7 @@ Ground truth fixture: `evals/fixtures/ground_truth.json` — 4 known findings in
 | 8 | CycloneDX SBOM export, scan diff API, GitHub/GitLab webhooks, OpenAPI export scripts | Done |
 | 9 | API key auth, Prometheus metrics, notification dispatcher, rate limiting (slowapi) | Done |
 | 10 | Suppression rules (.argusignore), scheduled scans (cron), compliance report, background scheduler | Done |
+| 11 | Policy engine, CI gate script, bulk finding operations (suppress/dismiss/assign) | Done |
 
 ---
 

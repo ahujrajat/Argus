@@ -20,6 +20,8 @@ from core.api.routers.webhooks import router as webhooks_router
 from core.api.routers.auth import router as auth_router
 from core.api.routers.suppressions import router as suppressions_router
 from core.api.routers.schedules import router as schedules_router
+from core.api.routers.policies import router as policies_router
+from core.api.routers.bulk import router as bulk_router
 from core.api.sse import scan_event_stream
 from core.governance.events import ScanEventBus, event_bus as _default_bus
 from core.db.seed import seed_pipeline_configs
@@ -75,6 +77,8 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(suppressions_router, prefix="/api/v1")
     app.include_router(schedules_router, prefix="/api/v1")
+    app.include_router(policies_router, prefix="/api/v1")
+    app.include_router(bulk_router, prefix="/api/v1")
 
     @app.get("/api/v1/health")
     async def health():

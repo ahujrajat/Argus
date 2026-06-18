@@ -169,6 +169,27 @@ class ApiKeyRow(Base):
     revoked_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class PolicyRow(Base):
+    __tablename__ = "policies"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text, nullable=True)
+    definition = Column(JSONB, nullable=False)   # serialized PolicyDefinition
+    active = Column(Boolean, default=True)
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now)
+
+
+class PolicyEvaluationRow(Base):
+    __tablename__ = "policy_evaluations"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    scan_id = Column(UUID(as_uuid=False), ForeignKey("scans.id"), nullable=False)
+    policy_id = Column(UUID(as_uuid=False), ForeignKey("policies.id"), nullable=False)
+    passed = Column(Boolean, nullable=False)
+    violations = Column(JSONB, default=list)
+    evaluated_at = Column(DateTime(timezone=True), default=_now)
+
+
 class TargetAuthorizationRow(Base):
     __tablename__ = "target_authorizations"
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
