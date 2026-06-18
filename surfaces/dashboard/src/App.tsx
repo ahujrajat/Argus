@@ -5,6 +5,7 @@ import { FindingsPage } from "./pages/findings/FindingsPage";
 import { RunsPage } from "./pages/runs/RunsPage";
 import { CostPage } from "./pages/cost/CostPage";
 import { PipelinePage } from "./pages/pipeline/PipelinePage";
+import { FixReviewPage } from "./pages/fixes/FixReviewPage";
 
 const qc = new QueryClient();
 
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/runs" element={<RunsPage />} />
             <Route path="/cost" element={<CostPage />} />
             <Route path="/pipeline" element={<PipelinePage />} />
+            <Route path="/fixes" element={<FixReviewPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

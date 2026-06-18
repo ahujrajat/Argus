@@ -82,6 +82,23 @@ export interface CostEntryDTO {
   timestamp: string;
 }
 
+export interface FixDTO {
+  id: string;
+  finding_id: string;
+  diff: string;
+  test: string | null;
+  explanation: string;
+  validation_result: {
+    applied: boolean;
+    finding_cleared: boolean;
+    new_findings: string[];
+    error: string | null;
+  } | null;
+  status: "proposed" | "applied" | "pr_opened" | "rejected" | "needs_attention";
+  reviewer: string | null;
+  audit_ref: string | null;
+}
+
 export const api = {
   listScans: () => get<ScanDTO[]>("/api/v1/scans/"),
   triggerScan: (body: { target_ref: string; mode?: string; approach?: SecurityApproach }) =>
@@ -95,4 +112,10 @@ export const api = {
       total_tokens_in: number;
       total_calls: number;
     }>("/api/v1/cost/summary"),
+  listScanFixes: (scanId: string) =>
+    get<FixDTO[]>(`/api/v1/scans/${scanId}/fixes`),
+  applyFix: (fixId: string) =>
+    post<{ status: string; fix_id: string }>(`/api/v1/fixes/${fixId}/apply`, {}),
+  rejectFix: (fixId: string, reason: string) =>
+    post<{ status: string; fix_id: string }>(`/api/v1/fixes/${fixId}/reject`, { reason }),
 };
