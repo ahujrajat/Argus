@@ -7,6 +7,7 @@ from core.api.routers.scans import router as scans_router
 from core.api.routers.findings import router as findings_router
 from core.api.routers.cost import router as cost_router
 from core.api.routers.fixes import router as fixes_router
+from core.api.routers.authorizations import router as authorizations_router
 from core.api.sse import scan_event_stream
 from core.governance.events import ScanEventBus, event_bus as _default_bus
 
@@ -26,6 +27,7 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     app.include_router(findings_router, prefix="/api/v1")
     app.include_router(cost_router, prefix="/api/v1")
     app.include_router(fixes_router, prefix="/api/v1")
+    app.include_router(authorizations_router, prefix="/api/v1")
 
     @app.get("/api/v1/health")
     async def health():
