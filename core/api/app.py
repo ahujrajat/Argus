@@ -22,11 +22,16 @@ from core.api.routers.suppressions import router as suppressions_router
 from core.api.routers.schedules import router as schedules_router
 from core.api.routers.policies import router as policies_router
 from core.api.routers.bulk import router as bulk_router
+from core.api.routers.orgs import router as orgs_router
+from core.api.routers.integrations import router as integrations_router
+from core.api.routers.analytics import router as analytics_router
+from core.api.routers.export import router as export_router
 from core.api.sse import scan_event_stream
 from core.governance.events import ScanEventBus, event_bus as _default_bus
 from core.db.seed import seed_pipeline_configs
 from core.db.session import get_session
 from core.observability.metrics import metrics_text
+from core.observability.tracing import setup_tracing
 
 # Rate limiter — 60 requests/minute per IP by default
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
@@ -39,6 +44,8 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         import asyncio
         from core.scheduler.runner import scheduler_loop
+
+        setup_tracing("argus")
 
         async with get_session() as session:
             await seed_pipeline_configs(session)
@@ -79,6 +86,10 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     app.include_router(schedules_router, prefix="/api/v1")
     app.include_router(policies_router, prefix="/api/v1")
     app.include_router(bulk_router, prefix="/api/v1")
+    app.include_router(orgs_router, prefix="/api/v1")
+    app.include_router(integrations_router, prefix="/api/v1")
+    app.include_router(analytics_router, prefix="/api/v1")
+    app.include_router(export_router, prefix="/api/v1")
 
     @app.get("/api/v1/health")
     async def health():
