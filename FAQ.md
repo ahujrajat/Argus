@@ -181,7 +181,7 @@ Yes — the design calls for Argus to run its own scanner suite and produce a Cy
 pytest --ignore=tests/e2e -q
 ```
 
-This runs all 307 unit and integration tests. E2E tests in `tests/e2e/` require a live PostgreSQL connection.
+This runs all 337 unit and integration tests. E2E tests in `tests/e2e/` require a live PostgreSQL connection.
 
 **Q: My test patches the wrong thing and the real scanner runs — what's happening?**
 
@@ -269,3 +269,73 @@ risk_score = (critical × 10) + (high × 5) + (medium × 2) + (low × 1)
 ```
 
 Info and negligible findings do not contribute. This is intentionally simple — use it as a relative trend indicator across scans, not an absolute severity measure.
+
+---
+
+## Policy Engine (Phase 11)
+
+**Q: How do I define a security policy?**
+
+`POST /api/v1/policies` with any combination of threshold fields:
+```json
+{
+  "name": "production-gate",
+  "max_critical": 0,
+  "max_high": 3,
+  "max_risk_score": 30,
+  "blocked_owasp": ["A03:2021"],
+  "block_on_any_critical": true
+}
+```
+All fields are optional — omitting a field means that constraint is not checked.
+
+**Q: How does policy evaluation work?**
+
+`POST /api/v1/policies/{policy_id}/evaluate/{scan_id}` builds a compliance report for the scan on-the-fly, evaluates it against the policy, and returns a `passed` boolean plus a list of `violations`. Each violation names the rule (`max_high`, `blocked_owasp:A03:2021`, etc.), the actual value, and the limit.
+
+**Q: How do I block a CI/CD pipeline if a scan fails a policy?**
+
+Use `scripts/ci-gate.sh` (or `scripts/ci-gate.bat` on Windows):
+```bash
+./scripts/ci-gate.sh --scan-id <uuid> --policy-id <policy-uuid>
+```
+Exit code is 0 on pass, 1 on policy failure. Without `--policy-id`, all active policies are evaluated and any failure causes a non-zero exit.
+
+**Q: Can I have multiple policies?**
+
+Yes. Create as many as needed (e.g. one for PRs with `max_high=5` and one for production deployments with `max_critical=0`). Evaluate against any specific policy, or omit `--policy-id` to check all active policies at once.
+
+**Q: How do I deactivate a policy without deleting it?**
+
+Pass `"active": false` when creating the policy, or update the definition via `PUT /api/v1/policies/{id}` (not yet implemented — currently recreate with `active=false`). Inactive policies are excluded from the `active_only=true` list endpoint and the CI gate default evaluation.
+
+---
+
+## Bulk Operations (Phase 11)
+
+**Q: How do I suppress many findings at once?**
+
+`POST /api/v1/findings/bulk-suppress` with a list of finding IDs (max 500 per request):
+```json
+{
+  "finding_ids": ["id1", "id2", "id3"],
+  "reason": "known false positives from vendor library"
+}
+```
+This creates a `fingerprint` suppression rule for each finding's `dedup_key` and marks the finding status as `suppressed`. Findings without a `dedup_key` are skipped (reported in `skipped_ids`).
+
+**Q: What is the difference between bulk-suppress and bulk-dismiss?**
+
+- `bulk-suppress` — creates permanent suppression rules by fingerprint; future scans will automatically suppress the same finding
+- `bulk-dismiss` — marks findings as dismissed in the current context; no suppression rule is created; future scans will still report the finding
+
+**Q: How do I assign findings to a team member for triage?**
+
+`POST /api/v1/findings/bulk-assign`:
+```json
+{
+  "finding_ids": ["id1", "id2"],
+  "assignee": "alice@example.com"
+}
+```
+The assignee is stored in the finding's `location` JSONB under the key `"assignee"`. The dashboard and API responses include this field.
