@@ -13,14 +13,20 @@ from core.agents.ingestion import IngestionAgent
 from core.agents.triage import TriageAgent
 from core.agents.explainer import ExplainerAgent
 from core.agents.fix import FixAgent
+from core.agents.pattern import PatternAgent
+from core.scanners.nuclei import NucleiAdapter
+from core.scanners.zap import ZAPAdapter
 from core.scanners.semgrep import SemgrepAdapter
 from core.scanners.trufflehog import TruffleHogAdapter
+from core.scanners.grype import GrypeAdapter
+from core.scanners.checkov import CheckovAdapter
 from core.governance.gate import GovernanceGate
 from core.governance.events import event_bus
 from core.governance.ledger import CostLedger
 from core.model.entities import (
-    Scan, ScanStatus, CostLedgerEntry, ModelTier, AuditLogEntry,
+    Scan, ScanStatus, CostLedgerEntry, ModelTier, AuditLogEntry, ScanMode,
 )
+from core.understanding.diff import compute_diff_files
 from core.db.tables import ScanRow, FindingRow, FixRow, AuditLogEntryRow
 
 log = structlog.get_logger()
@@ -29,12 +35,18 @@ _AGENT_REGISTRY: dict[str, type] = {
     "IngestionAgent": IngestionAgent,
     "SemgrepAdapter": SemgrepAdapter,
     "TruffleHogAdapter": TruffleHogAdapter,
+    "GrypeAdapter": GrypeAdapter,
+    "CheckovAdapter": CheckovAdapter,
     "TriageAgent": TriageAgent,
     "ExplainerAgent": ExplainerAgent,
     "FixAgent": FixAgent,
+    "PatternAgent": PatternAgent,
+    "NucleiAdapter": NucleiAdapter,
+    "ZAPAdapter": ZAPAdapter,
 }
 
-_SCANNER_AGENTS = {"SemgrepAdapter", "TruffleHogAdapter"}
+_SCANNER_AGENTS = {"SemgrepAdapter", "TruffleHogAdapter", "GrypeAdapter", "CheckovAdapter", "NucleiAdapter", "ZAPAdapter"}
+_DAST_AGENTS = {"NucleiAdapter", "ZAPAdapter"}
 
 
 class Orchestrator:
@@ -51,90 +63,146 @@ class Orchestrator:
         self._edges: list[dict] = raw["edges"]
 
     async def run(self, scan: Scan, session: AsyncSession) -> list[dict]:
+        from sqlalchemy import select as _select
+
+        # --- lifecycle: mark running ---
+        result = await session.execute(_select(ScanRow).where(ScanRow.id == str(scan.id)))
+        scan_row = result.scalar_one_or_none()
+        if scan_row is not None:
+            scan_row.status = "running"
+            await session.flush()
+
         event_bus.emit(scan.id, {"event": "scan_started", "scan_id": str(scan.id)})
         state: dict[str, AgentOutput] = {}
         total_cost = 0.0
 
+        # Compute diff files for real-time mode; scanners receive them via extra
+        diff_files: list[str] = []
+        if scan.mode == ScanMode.real_time and scan.target_ref.startswith("/"):
+            diff_files = compute_diff_files(scan.target_ref)
+            log.info("real_time_diff", file_count=len(diff_files), scan_id=str(scan.id))
+
         execution_order = self._topological_sort()
 
-        for node_id in execution_order:
-            node = self._nodes[node_id]
-            agent_cls = _AGENT_REGISTRY.get(node["agent"])
-            if not agent_cls:
-                log.warning("unknown_agent", agent=node["agent"])
-                continue
-
-            tier = ModelTier(node.get("tier", "balanced")) if node.get("tier") != "none" else ModelTier.none
-            budget_slice = scan.id  # budget managed per-scan by GovernanceGate
-
-            # Build context with outputs from predecessor nodes
-            extra = self._build_extra(node_id, state)
-
-            ctx = AgentContext(
-                scan=scan,
-                skills=[],
-                budget_slice_usd=0.0,
-                gate=self._gate,
-                approach=scan.approach,
-                extra=extra,
+        # Pre-flight DAST authorization check
+        dast_authorized = False
+        dast_nodes = [nid for nid, n in self._nodes.items() if n.get("agent") in _DAST_AGENTS]
+        if dast_nodes:
+            from core.db.tables import TargetAuthorizationRow as _TAR
+            auth_res = await session.execute(
+                _select(_TAR).where(_TAR.target == scan.target_ref)
             )
-
-            event_bus.emit(scan.id, {
-                "event": "agent_started",
-                "agent": node_id,
-                "agent_class": node["agent"],
-            })
-
-            try:
-                agent = agent_cls()
-                # Scanner adapters use .scan(), agents use .run()
-                if hasattr(agent, "scan") and not hasattr(agent, "run"):
-                    output = await agent.scan(ctx)
-                elif hasattr(agent, "run"):
-                    output = await agent.run(ctx)
-                else:
-                    raise AttributeError(f"Agent {node['agent']} has neither run() nor scan() method")
-            except Exception as e:
-                log.error("agent_error", agent=node_id, error=str(e), scan_id=str(scan.id))
-                event_bus.emit(scan.id, {"event": "agent_error", "agent": node_id, "error": str(e)})
-                output = AgentOutput(agent_id=node_id, data={}, skipped=True, skip_reason=str(e))
-
-            state[node_id] = output
-            total_cost += output.cost_usd
-
-            if output.cost_usd > 0:
-                entry = CostLedgerEntry(
-                    scope_type="scan",
-                    scope_id=scan.id,
-                    tokens_in=0,
-                    tokens_out=0,
-                    tier=tier,
-                    provider="anthropic",
-                    model_id="",
-                    cost_usd=output.cost_usd,
+            auth_row = auth_res.scalar_one_or_none()
+            if auth_row:
+                expired = (
+                    auth_row.expires_at is not None
+                    and auth_row.expires_at < datetime.now(timezone.utc)
                 )
-                await self._ledger.record(entry, session)
+                dast_authorized = not expired
+                if dast_authorized:
+                    log.info("dast_authorized", target=scan.target_ref, auth_id=auth_row.id)
+                else:
+                    log.warning("dast_authorization_expired", target=scan.target_ref)
+            else:
+                log.warning("dast_no_authorization", target=scan.target_ref)
+
+        try:
+            for node_id in execution_order:
+                node = self._nodes[node_id]
+                agent_cls = _AGENT_REGISTRY.get(node["agent"])
+                if not agent_cls:
+                    log.warning("unknown_agent", agent=node["agent"])
+                    continue
+
+                tier = ModelTier(node.get("tier", "balanced")) if node.get("tier") != "none" else ModelTier.none
+
+                # Build context with outputs from predecessor nodes
+                extra = self._build_extra(node_id, state)
+                if diff_files:
+                    extra["diff_files"] = diff_files
+                if node.get("agent") in _DAST_AGENTS:
+                    extra["dast_authorized"] = dast_authorized
+
+                ctx = AgentContext(
+                    scan=scan,
+                    skills=[],
+                    budget_slice_usd=0.0,
+                    gate=self._gate,
+                    approach=scan.approach,
+                    extra=extra,
+                )
+
+                event_bus.emit(scan.id, {
+                    "event": "agent_started",
+                    "agent": node_id,
+                    "agent_class": node["agent"],
+                })
+
+                try:
+                    agent = agent_cls()
+                    # Scanner adapters use .scan(), agents use .run()
+                    if hasattr(agent, "scan") and not hasattr(agent, "run"):
+                        output = await agent.scan(ctx)
+                    elif hasattr(agent, "run"):
+                        output = await agent.run(ctx)
+                    else:
+                        raise AttributeError(f"Agent {node['agent']} has neither run() nor scan() method")
+                except Exception as e:
+                    log.error("agent_error", agent=node_id, error=str(e), scan_id=str(scan.id))
+                    event_bus.emit(scan.id, {"event": "agent_error", "agent": node_id, "error": str(e)})
+                    output = AgentOutput(agent_id=node_id, data={}, skipped=True, skip_reason=str(e))
+
+                state[node_id] = output
+                total_cost += output.cost_usd
+
+                if output.cost_usd > 0:
+                    entry = CostLedgerEntry(
+                        scope_type="scan",
+                        scope_id=scan.id,
+                        tokens_in=0,
+                        tokens_out=0,
+                        tier=tier,
+                        provider="anthropic",
+                        model_id="",
+                        cost_usd=output.cost_usd,
+                    )
+                    await self._ledger.record(entry, session)
+
+                event_bus.emit(scan.id, {
+                    "event": "agent_completed",
+                    "agent": node_id,
+                    "cost_usd": output.cost_usd,
+                    "skipped": output.skipped,
+                })
+
+            findings = self._collect_findings(state)
+            await self._persist_findings(findings, scan, session)
+
+            fixes = self._collect_fixes(state)
+            await self._persist_fixes(fixes, session)
+
+            # --- lifecycle: mark completed ---
+            if scan_row is not None:
+                scan_row.status = "completed"
+                scan_row.finished_at = datetime.now(timezone.utc)
+                await session.flush()
 
             event_bus.emit(scan.id, {
-                "event": "agent_completed",
-                "agent": node_id,
-                "cost_usd": output.cost_usd,
-                "skipped": output.skipped,
+                "event": "scan_completed",
+                "total_cost_usd": total_cost,
+                "finding_count": len(findings),
             })
 
-        findings = self._collect_findings(state)
-        await self._persist_findings(findings, scan, session)
+            return findings
 
-        fixes = self._collect_fixes(state)
-        await self._persist_fixes(fixes, session)
-
-        event_bus.emit(scan.id, {
-            "event": "scan_completed",
-            "total_cost_usd": total_cost,
-            "finding_count": len(findings),
-        })
-
-        return findings
+        except Exception:
+            # --- lifecycle: mark failed ---
+            if scan_row is not None:
+                scan_row.status = "failed"
+                scan_row.finished_at = datetime.now(timezone.utc)
+                await session.flush()
+            event_bus.emit(scan.id, {"event": "scan_failed", "scan_id": str(scan.id)})
+            raise
 
     def _topological_sort(self) -> list[str]:
         deps: dict[str, set[str]] = {n: set() for n in self._nodes}

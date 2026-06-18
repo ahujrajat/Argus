@@ -117,6 +117,7 @@ class PipelineConfigRow(Base):
     version = Column(Integer, default=1)
     definition = Column(JSONB, nullable=False)
     is_default = Column(Boolean, default=False)
+    is_factory = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=_now)
 
 

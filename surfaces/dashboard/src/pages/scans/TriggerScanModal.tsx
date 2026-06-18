@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, SecurityApproach, APPROACH_LABELS, APPROACH_DESCRIPTIONS } from "../../api/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, SecurityApproach, APPROACH_LABELS, APPROACH_DESCRIPTIONS, PipelineListItem } from "../../api/client";
 
 interface Props { onClose: () => void; }
 
@@ -46,10 +46,22 @@ export function TriggerScanModal({ onClose }: Props) {
   const [targetRef, setTargetRef] = useState("");
   const [approach, setApproach] = useState<SecurityApproach>("penetration_testing");
   const [mode, setMode] = useState<"at_rest" | "real_time">("at_rest");
+  const [pipelineConfigName, setPipelineConfigName] = useState<string>("full-scan");
   const qc = useQueryClient();
 
+  const { data: pipelines = [] } = useQuery<PipelineListItem[]>({
+    queryKey: ["pipelines"],
+    queryFn: api.listPipelines,
+  });
+
   const mutation = useMutation({
-    mutationFn: () => api.triggerScan({ target_ref: targetRef, mode, approach }),
+    mutationFn: () =>
+      api.triggerScan({
+        target_ref: targetRef,
+        mode,
+        approach,
+        pipeline_config_name: pipelineConfigName || undefined,
+      }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["scans"] }); onClose(); },
   });
 
@@ -148,6 +160,25 @@ export function TriggerScanModal({ onClose }: Props) {
               ))}
             </div>
           </div>
+
+          {/* Pipeline */}
+          {pipelines.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Pipeline</label>
+              <select
+                value={pipelineConfigName}
+                onChange={(e) => setPipelineConfigName(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:border-transparent"
+                style={{ ["--tw-ring-color" as string]: "#A100FF" }}
+              >
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}{p.is_default ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Submit */}
           <button

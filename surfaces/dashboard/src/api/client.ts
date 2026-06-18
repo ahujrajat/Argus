@@ -42,6 +42,21 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json() as Promise<T>;
+}
+
+async function del(path: string): Promise<void> {
+  const res = await fetch(`${BASE}${path}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+}
+
 export interface FindingDTO {
   id: string;
   rule_id: string;
@@ -67,6 +82,7 @@ export interface ScanDTO {
   approach: SecurityApproach;
   cost_usd: number;
   started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface CostEntryDTO {
@@ -80,6 +96,41 @@ export interface CostEntryDTO {
   model_id: string;
   cost_usd: number;
   timestamp: string;
+}
+
+export interface NodeConfigDTO {
+  id: string;
+  agent: string;
+  tier: string;
+  budget_pct: number;
+}
+
+export interface EdgeDTO {
+  from: string;
+  to: string;
+  condition: string | null;
+}
+
+export interface PipelineDefinitionDTO {
+  nodes: NodeConfigDTO[];
+  edges: EdgeDTO[];
+}
+
+export interface PipelineListItem {
+  id: string;
+  name: string;
+  version: number;
+  is_default: boolean;
+  is_factory: boolean;
+}
+
+export interface PipelineDetailDTO {
+  id: string;
+  name: string;
+  version: number;
+  is_default: boolean;
+  is_factory: boolean;
+  definition: PipelineDefinitionDTO;
 }
 
 export interface FixDTO {
@@ -99,9 +150,16 @@ export interface FixDTO {
   audit_ref: string | null;
 }
 
+export interface TriggerScanRequest {
+  target_ref: string;
+  mode?: string;
+  approach?: SecurityApproach;
+  pipeline_config_name?: string;
+}
+
 export const api = {
   listScans: () => get<ScanDTO[]>("/api/v1/scans/"),
-  triggerScan: (body: { target_ref: string; mode?: string; approach?: SecurityApproach }) =>
+  triggerScan: (body: TriggerScanRequest) =>
     post<{ scan_id: string }>("/api/v1/scans/", body),
   getScanFindings: (scanId: string) =>
     get<FindingDTO[]>(`/api/v1/scans/${scanId}/findings`),
@@ -118,4 +176,15 @@ export const api = {
     post<{ status: string; fix_id: string }>(`/api/v1/fixes/${fixId}/apply`, {}),
   rejectFix: (fixId: string, reason: string) =>
     post<{ status: string; fix_id: string }>(`/api/v1/fixes/${fixId}/reject`, { reason }),
+  getScan: (id: string) => get<ScanDTO>(`/api/v1/scans/${id}`),
+  cancelScan: (id: string) => del(`/api/v1/scans/${id}`),
+  listPipelines: () => get<PipelineListItem[]>("/api/v1/pipelines"),
+  getPipeline: (id: string) => get<PipelineDetailDTO>(`/api/v1/pipelines/${id}`),
+  createPipeline: (body: { name: string; definition: PipelineDefinitionDTO; is_default?: boolean }) =>
+    post<PipelineDetailDTO>("/api/v1/pipelines", body),
+  updatePipeline: (id: string, body: { definition: PipelineDefinitionDTO; is_default?: boolean }) =>
+    put<PipelineDetailDTO>(`/api/v1/pipelines/${id}`, body),
+  deletePipeline: (id: string) => del(`/api/v1/pipelines/${id}`),
+  clonePipeline: (id: string, name: string) =>
+    post<PipelineDetailDTO>(`/api/v1/pipelines/${id}/clone`, { name }),
 };

@@ -1,20 +1,64 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../../api/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api, ScanDTO } from "../../api/client";
 import { useScanEvents } from "../../hooks/useScanEvents";
 import { RunTrace } from "./RunTrace";
 import { BudgetGauge } from "./BudgetGauge";
 
+const STATUS_COLORS: Record<string, { bg: string; text: string; dot?: string; pulse?: boolean }> = {
+  pending:   { bg: "bg-gray-100",   text: "text-gray-600",   dot: "bg-gray-400" },
+  running:   { bg: "bg-blue-50",    text: "text-blue-700",   dot: "bg-blue-500", pulse: true },
+  completed: { bg: "bg-green-50",   text: "text-green-700",  dot: "bg-green-500" },
+  failed:    { bg: "bg-red-50",     text: "text-red-700",    dot: "bg-red-500" },
+  cancelled: { bg: "bg-yellow-50",  text: "text-yellow-700", dot: "bg-yellow-500" },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_COLORS[status] ?? STATUS_COLORS.pending;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.bg} ${cfg.text}`}>
+      {cfg.dot && (
+        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} ${cfg.pulse ? "animate-pulse" : ""}`} />
+      )}
+      {status}
+    </span>
+  );
+}
+
+const TERMINAL_STATUSES = new Set(["completed", "failed", "cancelled"]);
+
 export function RunsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { data: scans } = useQuery({ queryKey: ["scans"], queryFn: api.listScans });
+  const qc = useQueryClient();
+
+  const { data: scans = [], refetch: refetchScans } = useQuery<ScanDTO[]>({
+    queryKey: ["scans"],
+    queryFn: api.listScans,
+    refetchInterval: 5000,
+  });
+
   const { events, connected } = useScanEvents(selectedId);
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => api.cancelScan(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["scans"] });
+    },
+  });
+
+  const selectedScan = scans.find((s) => s.id === selectedId) ?? null;
 
   const totalCost = events.filter((e) => e.event === "llm_call").reduce((s, e) => s + (e.cost_usd ?? 0), 0);
   const modelCounts: Record<string, number> = {};
   events.filter((e) => e.event === "llm_call").forEach((e) => {
     if (e.model_id) modelCounts[e.model_id] = (modelCounts[e.model_id] ?? 0) + 1;
   });
+
+  function handleCancel() {
+    if (!selectedId) return;
+    if (!confirm("Cancel this scan?")) return;
+    cancelMutation.mutate(selectedId);
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -41,10 +85,27 @@ export function RunsPage() {
           onChange={(e) => setSelectedId(e.target.value || null)}
         >
           <option value="">Select a scan…</option>
-          {scans?.map((s) => (
-            <option key={s.id} value={s.id}>{s.target_ref} — {s.status}</option>
+          {scans.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.target_ref.split("/").at(-1) ?? s.target_ref} — {s.status}
+            </option>
           ))}
         </select>
+
+        {selectedScan && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <StatusBadge status={selectedScan.status} />
+            {!TERMINAL_STATUSES.has(selectedScan.status) && (
+              <button
+                onClick={handleCancel}
+                disabled={cancelMutation.isPending}
+                className="px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main layout */}
