@@ -63,3 +63,56 @@ async def test_orchestrator_runs_full_pipeline(mock_gate):
     first = findings[0]
     assert "attack_scenario" in first
     assert "explanation" in first
+
+
+async def test_orchestrator_persist_fixes_writes_fix_rows():
+    gate = MagicMock()
+    orch = Orchestrator(gate=gate, pipeline_config_path="config/pipeline_configs/full-scan.yaml")
+
+    fixes = [{
+        "id": str(uuid4()),
+        "finding_id": str(uuid4()),
+        "diff": "--- a/app.py\n+++ b/app.py\n@@ -5 +5 @@\n-bad\n+good\n",
+        "test": None,
+        "explanation": "Fixed SQL injection.",
+        "validation_result": None,
+        "status": "proposed",
+        "reviewer": None,
+        "audit_ref": None,
+    }]
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+
+    await orch._persist_fixes(fixes, session)
+
+    from core.db.tables import FixRow
+    added_types = [type(call.args[0]).__name__ for call in session.add.call_args_list]
+    assert "FixRow" in added_types
+
+
+async def test_orchestrator_collect_fixes_reads_fix_generation_state():
+    gate = MagicMock()
+    from core.agents.base import AgentOutput
+    orch = Orchestrator(gate=gate, pipeline_config_path="config/pipeline_configs/full-scan.yaml")
+
+    fix_id = str(uuid4())
+    state = {
+        "fix_generation": AgentOutput(
+            agent_id="fix_generation",
+            data={"fixes": [{"id": fix_id, "diff": "...", "explanation": "fixed"}]},
+            cost_usd=0.01,
+        )
+    }
+    result = orch._collect_fixes(state)
+    assert len(result) == 1
+    assert result[0]["id"] == fix_id
+
+
+async def test_orchestrator_fix_agent_registered():
+    gate = MagicMock()
+    from core.agents.orchestrator import _AGENT_REGISTRY
+    from core.agents.fix import FixAgent
+    assert "FixAgent" in _AGENT_REGISTRY
+    assert _AGENT_REGISTRY["FixAgent"] is FixAgent

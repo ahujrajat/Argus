@@ -12,6 +12,7 @@ from core.agents.base import AgentContext, AgentOutput
 from core.agents.ingestion import IngestionAgent
 from core.agents.triage import TriageAgent
 from core.agents.explainer import ExplainerAgent
+from core.agents.fix import FixAgent
 from core.scanners.semgrep import SemgrepAdapter
 from core.scanners.trufflehog import TruffleHogAdapter
 from core.governance.gate import GovernanceGate
@@ -20,7 +21,7 @@ from core.governance.ledger import CostLedger
 from core.model.entities import (
     Scan, ScanStatus, CostLedgerEntry, ModelTier, AuditLogEntry,
 )
-from core.db.tables import ScanRow, FindingRow, AuditLogEntryRow
+from core.db.tables import ScanRow, FindingRow, FixRow, AuditLogEntryRow
 
 log = structlog.get_logger()
 
@@ -30,6 +31,7 @@ _AGENT_REGISTRY: dict[str, type] = {
     "TruffleHogAdapter": TruffleHogAdapter,
     "TriageAgent": TriageAgent,
     "ExplainerAgent": ExplainerAgent,
+    "FixAgent": FixAgent,
 }
 
 _SCANNER_AGENTS = {"SemgrepAdapter", "TruffleHogAdapter"}
@@ -123,6 +125,9 @@ class Orchestrator:
         findings = self._collect_findings(state)
         await self._persist_findings(findings, scan, session)
 
+        fixes = self._collect_fixes(state)
+        await self._persist_fixes(fixes, session)
+
         event_bus.emit(scan.id, {
             "event": "scan_completed",
             "total_cost_usd": total_cost,
@@ -158,9 +163,12 @@ class Orchestrator:
                 all_findings.extend(output.data.get("findings", []))
         if all_findings:
             extra["findings"] = all_findings
-        # Pass triage output to explainer
+        # Pass triage output to explainer and fix_generation
         if "triage" in state:
             extra["triaged_findings"] = state["triage"].data.get("triaged_findings", [])
+        # Pass explainer output to fix_generation
+        if "explainer" in state:
+            extra["explained_findings"] = state["explainer"].data.get("explained_findings", [])
         return extra
 
     def _collect_findings(self, state: dict[str, AgentOutput]) -> list[dict]:
@@ -199,3 +207,29 @@ class Orchestrator:
             await session.flush()
         except Exception as e:
             log.warning("persist_findings_error", error=str(e))
+
+    def _collect_fixes(self, state: dict[str, AgentOutput]) -> list[dict]:
+        if "fix_generation" in state:
+            return state["fix_generation"].data.get("fixes", [])
+        return []
+
+    async def _persist_fixes(
+        self, fixes: list[dict], session: AsyncSession
+    ) -> None:
+        for f in fixes:
+            row = FixRow(
+                id=str(f.get("id", "")),
+                finding_id=str(f.get("finding_id", "")),
+                diff=f.get("diff", ""),
+                test=f.get("test"),
+                explanation=f.get("explanation", ""),
+                validation_result=f.get("validation_result"),
+                status=f.get("status", "proposed"),
+                reviewer=f.get("reviewer"),
+                audit_ref=str(f["audit_ref"]) if f.get("audit_ref") else None,
+            )
+            session.add(row)
+        try:
+            await session.flush()
+        except Exception as e:
+            log.warning("persist_fixes_error", error=str(e))

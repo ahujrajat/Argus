@@ -23,6 +23,10 @@ nodes:
     agent: ExplainerAgent
     tier: fast
     budget_pct: 15
+  - id: fix_generation
+    agent: FixAgent
+    tier: balanced
+    budget_pct: 35
 edges:
   - from: ingestion
     to: sast
@@ -38,4 +42,7 @@ edges:
     condition: null
   - from: triage
     to: explainer
+    condition: null
+  - from: explainer
+    to: fix_generation
     condition: null
