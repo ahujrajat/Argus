@@ -1,0 +1,23 @@
+name: python-secure-coding
+version: 1
+description: Security-focused guidance for Python applications
+languages:
+  - python
+frameworks:
+  - django
+  - flask
+  - fastapi
+activation: active
+body: |
+  When analyzing Python code, pay special attention to:
+  - SQL injection via string formatting in ORM or raw SQL calls (use parameterized queries)
+  - Insecure deserialization: pickle.loads, yaml.load (use yaml.safe_load), marshal
+  - SSRF via requests/httpx with user-controlled URLs — validate scheme and host against allowlist
+  - Path traversal in os.path.join or open() when user input reaches the path
+  - Django: CSRF bypass via @csrf_exempt on state-changing views; insecure SESSION_COOKIE_SECURE=False
+  - Flask: app.secret_key from environment but committed in code; debug=True in production
+  - FastAPI: missing rate limiting on auth endpoints; Bearer token validation gaps
+  - Subprocess injection: shell=True with unsanitized input
+  - XML parsing: defusedxml not used, external entity expansion enabled
+  - Hardcoded credentials in settings.py, config.py, or .env files committed to VCS
+rules_dir: null
