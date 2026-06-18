@@ -115,8 +115,15 @@ def set_gradient_2stop(shape, c1_hex: str, c2_hex: str, angle: float = 45.0):
 
 
 def add_shadow(shape, alpha: int = 76, blur: int = 95000, dist: int = 38000, direction: int = 5400000):
-    """Soft outer drop shadow. alpha is 0-100 (% opacity of the shadow)."""
+    """Soft outer drop shadow. alpha is 0-100 (% opacity of the shadow).
+
+    Removes any pre-existing effectLst first (e.g. the empty one created by
+    `shadow.inherit = False`) so the shape never ends up with two effectLst
+    children — duplicates are schema-invalid and trigger a PowerPoint repair.
+    """
     spPr = shape._element.spPr
+    for existing in spPr.findall(qn("a:effectLst")):
+        spPr.remove(existing)
     xml = (
         f'<a:effectLst {nsdecls("a")}>'
         f'<a:outerShdw blurRad="{blur}" dist="{dist}" dir="{direction}" rotWithShape="0">'
