@@ -6,13 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.api.routers.scans import router as scans_router
 from core.api.routers.findings import router as findings_router
 from core.api.routers.cost import router as cost_router
+from core.api.routers.fixes import router as fixes_router
 from core.api.sse import scan_event_stream
 from core.governance.events import ScanEventBus, event_bus as _default_bus
 
 
 def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     bus = event_bus or _default_bus
-    app = FastAPI(title="Argus Security Platform", version="0.1.0", docs_url="/docs")
+    app = FastAPI(title="Argus Security Platform", version="0.2.0", docs_url="/docs")
 
     app.add_middleware(
         CORSMiddleware,
@@ -24,6 +25,7 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     app.include_router(scans_router, prefix="/api/v1")
     app.include_router(findings_router, prefix="/api/v1")
     app.include_router(cost_router, prefix="/api/v1")
+    app.include_router(fixes_router, prefix="/api/v1")
 
     @app.get("/api/v1/health")
     async def health():
@@ -41,11 +43,6 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     @app.get("/api/v1/skills")
     async def list_skills():
         return []
-
-    @app.get("/api/v1/fixes/{fix_id}")
-    async def get_fix(fix_id: UUID):
-        from fastapi import HTTPException
-        raise HTTPException(501, "Fix generation available in Phase 2")
 
     return app
 
