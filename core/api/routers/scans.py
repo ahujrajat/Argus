@@ -1,13 +1,14 @@
 # core/api/routers/scans.py
 from __future__ import annotations
 from uuid import UUID
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from core.api.deps import get_db
 from core.db.tables import ScanRow, FindingRow
 from core.model.entities import ScanMode, SecurityApproach
+from core.api.pagination import decode_cursor, paginate_list
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 
@@ -24,11 +25,24 @@ class BatchScanRequest(BaseModel):
 
 
 @router.get("/")
-async def list_scans(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ScanRow).order_by(ScanRow.started_at.desc()).limit(50))
-    rows = result.scalars().all()
-    return [{"id": r.id, "target_ref": r.target_ref, "status": r.status,
-             "mode": r.mode, "approach": r.approach, "cost_usd": r.cost_usd} for r in rows]
+async def list_scans(
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=200),
+    cursor: str | None = Query(default=None),
+):
+    q = select(ScanRow).order_by(ScanRow.id)
+    if cursor:
+        q = q.where(ScanRow.id > decode_cursor(cursor))
+    q = q.limit(limit + 1)
+    result = await db.execute(q)
+    rows = list(result.scalars().all())
+    items = [
+        {"id": r.id, "target_ref": r.target_ref, "status": r.status,
+         "mode": r.mode, "approach": r.approach, "cost_usd": r.cost_usd}
+        for r in rows
+    ]
+    page = paginate_list(items, limit)
+    return {"items": page.items, "next_cursor": page.next_cursor, "limit": limit}
 
 
 @router.post("/", status_code=202)

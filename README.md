@@ -397,6 +397,46 @@ POST   /findings/bulk-dismiss    Mark up to 500 findings as dismissed
 POST   /findings/bulk-assign     Assign up to 500 findings to a user/team
 ```
 
+### Organizations & RBAC (Phase 12)
+```
+POST   /orgs                          Create organization
+GET    /orgs                          List organizations
+GET    /orgs/{id}                     Organization detail
+DELETE /orgs/{id}                     Delete organization
+POST   /orgs/{id}/members             Add member (body: user_id, role)
+GET    /orgs/{id}/members             List members
+DELETE /orgs/{id}/members/{member_id} Remove member
+```
+
+Role enforcement via `X-Argus-Role` request header. Values: `viewer` (read-only) · `analyst` (triage + suppress) · `admin` (full access). Use `require_role("analyst")` dependency on write endpoints.
+
+### Integrations (Phase 13)
+```
+POST   /integrations/jira/issue          Create Jira issue from a finding (env: JIRA_URL, JIRA_API_TOKEN, JIRA_EMAIL, JIRA_PROJECT_KEY)
+POST   /integrations/pagerduty/trigger   Trigger PagerDuty incident from a scan (env: PD_ROUTING_KEY)
+POST   /integrations/slack/finding       Post rich Block Kit finding card to Slack (env: SLACK_WEBHOOK_URL)
+```
+
+Returns 503 if the integration environment variable is not configured.
+
+### Analytics (Phase 14)
+```
+GET    /analytics/trends?granularity=day&days_back=30    Finding counts bucketed by day or week
+GET    /analytics/mttr?days_back=90                      Mean time to remediate (hours + sample size)
+GET    /analytics/top-rules?top_n=10&days_back=30        Most frequent rule IDs
+GET    /analytics/summary?days_back=30                   Scan totals, severity breakdown, top OWASP, avg risk
+GET    /scans/export/csv?days_back=30                    Download findings as CSV (StreamingResponse)
+```
+
+### Pagination & Search (Phase 15)
+
+All list endpoints now support cursor-based pagination:
+```
+GET    /scans?limit=20&cursor=<opaque>
+GET    /scans/{id}/findings?limit=50&cursor=<opaque>&q=<search>
+```
+Response shape: `{"items": [...], "next_cursor": "...", "limit": N}`. When `next_cursor` is `null`, the last page has been reached. The `q` parameter on findings performs case-insensitive substring search across `rule_id`, `source_tool`, `cwe`, `owasp_category`, `explanation`, `dedup_key`, and `location.file`.
+
 ---
 
 ## Development
@@ -473,7 +513,10 @@ tests/
   core/
     agents/          # orchestrator, triage, explainer, fix, pattern, DAST auth
     api/             # scans, findings, fixes, pipelines, skills, config, audit,
-                     # suppressions, schedules, compliance report
+                     # suppressions, schedules, compliance report, policies, bulk,
+                     # orgs, integrations, analytics, pagination, search
+    analytics/       # trend computation pure functions
+    integrations/    # jira, pagerduty, slack_rich unit tests
     scanners/        # semgrep, trufflehog, grype, checkov, nuclei, zap
     scheduler/       # background cron runner
     suppression/     # suppression engine + .argusignore parser
@@ -487,7 +530,7 @@ tests/
 
 Run without a database:
 ```bash
-pytest --ignore=tests/e2e -q   # 337 tests
+pytest --ignore=tests/e2e -q   # 433 tests
 ```
 
 Run everything (needs `docker compose up -d`):
@@ -532,6 +575,10 @@ Ground truth fixture: `evals/fixtures/ground_truth.json` — 4 known findings in
 | 9 | API key auth, Prometheus metrics, notification dispatcher, rate limiting (slowapi) | Done |
 | 10 | Suppression rules (.argusignore), scheduled scans (cron), compliance report, background scheduler | Done |
 | 11 | Policy engine, CI gate script, bulk finding operations (suppress/dismiss/assign) | Done |
+| 12 | Multi-tenancy & RBAC — organizations, workspaces, roles (admin/analyst/viewer) | Done |
+| 13 | Integrations hub — Jira, PagerDuty, Slack Block Kit rich messages | Done |
+| 14 | Trend analytics — finding trends, MTTR, top rules, summary, CSV export | Done |
+| 15 | Production polish — cursor pagination, full-text search, OpenTelemetry tracing | Done |
 
 ---
 

@@ -181,7 +181,7 @@ Yes — the design calls for Argus to run its own scanner suite and produce a Cy
 pytest --ignore=tests/e2e -q
 ```
 
-This runs all 337 unit and integration tests. E2E tests in `tests/e2e/` require a live PostgreSQL connection.
+This runs all 433 unit and integration tests. E2E tests in `tests/e2e/` require a live PostgreSQL connection.
 
 **Q: My test patches the wrong thing and the real scanner runs — what's happening?**
 
@@ -339,3 +339,125 @@ This creates a `fingerprint` suppression rule for each finding's `dedup_key` and
 }
 ```
 The assignee is stored in the finding's `location` JSONB under the key `"assignee"`. The dashboard and API responses include this field.
+
+---
+
+## Multi-tenancy & RBAC (Phase 12)
+
+**Q: How does role-based access control work in Argus?**
+
+Every API request can carry an `X-Argus-Role` header with value `viewer`, `analyst`, or `admin`. The `require_role()` dependency enforces a minimum rank:
+
+| Role | Rank | Access |
+|---|---|---|
+| viewer | 1 | Read-only: scans, findings, reports |
+| analyst | 2 | + triage, suppress, dismiss, assign |
+| admin | 3 | + org management, key rotation, config |
+
+Missing header defaults to `viewer`. Returns 403 if the role is insufficient.
+
+**Q: How do I create an organization and add members?**
+
+```bash
+# Create org
+POST /api/v1/orgs  {"name": "Accenture Security", "slug": "accenture-security"}
+
+# Add a member
+POST /api/v1/orgs/{org_id}/members  {"user_id": "alice@accenture.com", "role": "analyst"}
+```
+
+Slugs must be lowercase alphanumeric with hyphens (e.g. `my-team`). Each org can have multiple workspaces.
+
+**Q: Is multi-tenancy enforced at the data layer?**
+
+Phase 12 implements the org/workspace data model and role enforcement dependency. Full row-level data isolation (scoping all queries to `org_id`) is a configuration layer extension — for single-tenant deployments the org layer is used purely for access control grouping.
+
+---
+
+## Integrations (Phase 13)
+
+**Q: How do I connect Argus to Jira?**
+
+Set these environment variables before starting Argus:
+```bash
+JIRA_URL=https://your-org.atlassian.net
+JIRA_EMAIL=bot@your-org.com
+JIRA_API_TOKEN=your-api-token
+JIRA_PROJECT_KEY=SEC
+```
+Then: `POST /api/v1/integrations/jira/issue {"finding_id": "<uuid>"}` creates a Bug issue with full finding details in the description.
+
+**Q: How do I page on-call via PagerDuty?**
+
+Set `PD_ROUTING_KEY=<events-v2-integration-key>` then:
+```bash
+POST /api/v1/integrations/pagerduty/trigger
+{"scan_id": "<uuid>", "severity": "critical"}
+```
+The incident is auto-deduplicated per scan using a stable dedup_key.
+
+**Q: What happens if an integration env var is not set?**
+
+The endpoint returns HTTP 503 with `{"detail": "Jira integration not configured"}`. No silent failures — configure the env var or handle the 503 in your pipeline.
+
+**Q: How are Slack rich messages different from the existing notification dispatcher?**
+
+`core/notifications/dispatcher.py` sends plain-text webhook messages. `core/integrations/slack_rich.py` sends structured Block Kit cards with color-coded severity, direct links to findings, and a context footer. Both use `SLACK_WEBHOOK_URL`; they're independent — use `POST /integrations/slack/finding` to send a rich card for a specific finding.
+
+---
+
+## Analytics (Phase 14)
+
+**Q: How do I get a trend of findings over time?**
+
+```bash
+GET /api/v1/analytics/trends?granularity=day&days_back=30
+```
+Returns a list of `{"bucket": "2026-06-01", "total": 12, "critical": 1, "high": 5, ...}` for each day (or week when `granularity=week`). Zero-finding days are included so charts don't have gaps.
+
+**Q: How is MTTR calculated?**
+
+Mean Time to Remediate = average hours between a finding being created and its scan's `finished_at` timestamp (used as a proxy for fix time) for all findings with `status="fixed"`. The response includes `sample_size` so you know how statistically significant the figure is.
+
+**Q: How do I export all findings to CSV?**
+
+```bash
+curl -H "Authorization: Bearer $ARGUS_KEY" \
+  "https://argus.internal/api/v1/scans/export/csv?days_back=30" \
+  -o findings.csv
+```
+Columns: `scan_id, target_ref, rule_id, severity, owasp_category, cwe, file, line, status, dedup_key`.
+
+---
+
+## Production Features (Phase 15)
+
+**Q: How does cursor-based pagination work?**
+
+```bash
+# First page
+GET /api/v1/scans?limit=20
+# Response includes next_cursor if more pages exist
+{"items": [...], "next_cursor": "dXVpZC0x...", "limit": 20}
+
+# Next page
+GET /api/v1/scans?limit=20&cursor=dXVpZC0x...
+```
+Cursors are opaque base64-encoded IDs. `next_cursor: null` means you've reached the last page.
+
+**Q: How does full-text search work on findings?**
+
+`GET /api/v1/scans/{id}/findings?q=injection` performs case-insensitive substring search across `rule_id`, `source_tool`, `cwe`, `owasp_category`, `explanation`, `dedup_key`, and `location.file`. It works in-memory after DB fetch, so it pairs correctly with cursor pagination.
+
+**Q: How do I enable distributed tracing?**
+
+Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://your-collector:4318` before starting Argus. The platform initializes a `TracerProvider` with a `BatchSpanProcessor` sending to your OTLP collector (e.g. Jaeger, Tempo, Honeycomb). Without the env var, traces are printed to stdout (useful for local debugging).
+
+**Q: What does "433 tests" cover?**
+
+The test suite runs in ~40 seconds without a database and covers all 15 phases:
+- Unit tests for all pure-function modules (suppression engine, policy evaluator, analytics, pagination, search)
+- API tests using FastAPI's `TestClient` with dependency injection overrides (no real DB needed)
+- Integration-layer tests patching httpx for Jira/PD/Slack
+- Scanner adapter tests patching subprocess calls
+- E2E tests (separate, require PostgreSQL) for acceptance criteria
