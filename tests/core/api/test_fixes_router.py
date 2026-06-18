@@ -2,7 +2,7 @@
 from __future__ import annotations
 import pytest
 from uuid import uuid4
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient, ASGITransport
 from core.api.app import create_app
 from core.api.deps import get_db
@@ -40,6 +40,7 @@ def _make_mock_db(scalar_result=None, scalars_result=None):
     mock_result.scalars.return_value.all.return_value = scalars_result or []
     mock_db.execute = AsyncMock(return_value=mock_result)
     mock_db.add = MagicMock()
+    mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
     return mock_db
@@ -130,15 +131,19 @@ async def test_apply_fix_writes_audit_log_before_status_change(app):
         call_order.append(f"add:{type(obj).__name__}")
 
     mock_db.add = MagicMock(side_effect=track_add)
-    mock_db.commit = AsyncMock(side_effect=lambda: call_order.append("committed"))
 
     async def override():
         yield mock_db
 
     app.dependency_overrides[get_db] = override
     try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.post(f"/api/v1/fixes/{fix_id}/apply")
+        with patch("core.api.routers.fixes.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stderr="")
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+                resp = await c.post(
+                    f"/api/v1/fixes/{fix_id}/apply",
+                    json={"create_pr": False},
+                )
     finally:
         app.dependency_overrides.clear()
 
@@ -157,7 +162,10 @@ async def test_apply_fix_returns_404_when_not_found(app):
     app.dependency_overrides[get_db] = override
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            resp = await c.post(f"/api/v1/fixes/{uuid4()}/apply")
+            resp = await c.post(
+                f"/api/v1/fixes/{uuid4()}/apply",
+                json={"create_pr": False},
+            )
     finally:
         app.dependency_overrides.clear()
 
