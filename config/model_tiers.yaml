@@ -1,0 +1,38 @@
+providers:
+  default: anthropic
+
+tiers:
+  fast:
+    anthropic: claude-haiku-4-5-20251001
+    openai: gpt-4o-mini
+    google: gemini-2.0-flash
+  balanced:
+    anthropic: claude-sonnet-4-6
+    openai: gpt-4o
+    google: gemini-2.0-pro
+  top:
+    anthropic: claude-opus-4-8
+    openai: o1
+    google: gemini-2.5-pro
+
+escalation_rules:
+  - condition: confidence_lt
+    threshold: 0.5
+    from_tier: balanced
+    to_tier: top
+  - condition: diff_files_gt
+    threshold: 10
+    from_tier: balanced
+    to_tier: top
+
+task_defaults:
+  routing: fast
+  classification: fast
+  extraction: fast
+  explanation: fast
+  triage: balanced
+  false_positive_filter: balanced
+  fix_generation: balanced
+  pattern_analysis: balanced
+  complex_fix: top
+  gap_analysis: top

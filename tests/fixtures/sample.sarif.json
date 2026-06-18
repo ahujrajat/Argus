@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [{
+    "tool": {
+      "driver": {
+        "name": "semgrep",
+        "rules": [{
+          "id": "python.lang.security.audit.formatted-sql-query.formatted-sql-query",
+          "name": "FormattedSQLQuery",
+          "shortDescription": {"text": "Formatted SQL query"},
+          "properties": {
+            "tags": ["CWE-89", "OWASP-A03:2021"]
+          }
+        }]
+      }
+    },
+    "results": [{
+      "ruleId": "python.lang.security.audit.formatted-sql-query.formatted-sql-query",
+      "level": "error",
+      "message": {"text": "Detected a formatted string in a SQL statement."},
+      "locations": [{
+        "physicalLocation": {
+          "artifactLocation": {"uri": "app.py"},
+          "region": {"startLine": 5, "endLine": 6, "snippet": {"text": "query = f\"SELECT * FROM users WHERE username = '{username}'\""}}
+        }
+      }]
+    }]
+  }]
+}

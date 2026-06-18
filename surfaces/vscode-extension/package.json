@@ -1,0 +1,52 @@
+{
+  "name": "argus-vscode",
+  "displayName": "Argus Security Scanner",
+  "description": "AI-powered security scanning inside VS Code",
+  "version": "0.1.0",
+  "publisher": "accenture-security",
+  "type": "commonjs",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "argus.triggerScan",
+        "title": "Argus: Trigger Security Scan",
+        "icon": "$(shield)"
+      }
+    ],
+    "configuration": {
+      "title": "Argus",
+      "properties": {
+        "argus.apiBase": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Base URL of the Argus API server"
+        }
+      }
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "argus.findingsView",
+          "name": "Argus Findings"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --platform=node --target=node18 --external:vscode --format=cjs",
+    "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --platform=node --target=node18 --external:vscode --format=cjs --watch",
+    "package": "npx vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  }
+}

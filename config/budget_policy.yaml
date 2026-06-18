@@ -1,0 +1,10 @@
+per_scan:
+  soft_limit_usd: 4.00
+  hard_limit_usd: 5.00
+
+monthly:
+  soft_limit_usd: 160.00
+  hard_limit_usd: 200.00
+
+on_soft_limit: warn
+on_hard_limit: stop_and_mark_skipped

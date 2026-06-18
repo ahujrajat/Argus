@@ -1,0 +1,20 @@
+name: iac-hardening
+version: 1
+description: Security hardening guidance for Infrastructure-as-Code (Terraform, Kubernetes, CloudFormation)
+languages: []
+frameworks:
+  - terraform
+  - kubernetes
+  - cloudformation
+  - helm
+activation: active
+body: |
+  When analyzing IaC findings:
+  - Terraform: focus on S3 bucket public access, IAM wildcard permissions (*), security group 0.0.0.0/0 ingress, unencrypted EBS/RDS volumes
+  - Kubernetes: privileged containers, hostPath mounts, missing resource limits, default service accounts with cluster-admin, missing NetworkPolicy
+  - CloudFormation: hardcoded credentials in UserData, overly permissive IAM, unencrypted S3/DynamoDB
+  - Prioritize misconfigs that allow network access or privilege escalation above storage encryption gaps
+  - Multi-cloud: treat Azure managed identity gaps and GCP service account key files as critical
+  - Checkov suppressions (checkov:skip) should be flagged for review — may mask real issues
+  - Lateral movement risk: an IAM role with iam:PassRole + sts:AssumeRole is escalation-capable
+rules_dir: null

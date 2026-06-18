@@ -1,0 +1,31 @@
+name: sca-scan
+version: 1
+is_default: false
+mode: at_rest
+nodes:
+  - id: ingestion
+    agent: IngestionAgent
+    tier: fast
+    budget_pct: 10
+  - id: sca
+    agent: GrypeAdapter
+    tier: none
+    budget_pct: 0
+  - id: triage
+    agent: TriageAgent
+    tier: balanced
+    budget_pct: 55
+  - id: explainer
+    agent: ExplainerAgent
+    tier: fast
+    budget_pct: 35
+edges:
+  - from: ingestion
+    to: sca
+    condition: null
+  - from: sca
+    to: triage
+    condition: null
+  - from: triage
+    to: explainer
+    condition: null

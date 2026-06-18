@@ -1,0 +1,14 @@
+activation: active
+body: '- Check for algorithm confusion (alg:none)
+
+  - Verify signature validation is not skipped
+
+  - Check for hardcoded signing secrets'
+description: Detect JWT implementation vulnerabilities
+frameworks: []
+languages:
+- python
+- javascript
+name: jwt-analysis
+rules_dir: null
+version: 1

@@ -1,0 +1,75 @@
+name: comprehensive-scan
+version: 1
+is_default: false
+mode: at_rest
+nodes:
+  - id: ingestion
+    agent: IngestionAgent
+    tier: fast
+    budget_pct: 5
+  - id: sast
+    agent: SemgrepAdapter
+    tier: none
+    budget_pct: 0
+  - id: secrets
+    agent: TruffleHogAdapter
+    tier: none
+    budget_pct: 0
+  - id: sca
+    agent: GrypeAdapter
+    tier: none
+    budget_pct: 0
+  - id: iac
+    agent: CheckovAdapter
+    tier: none
+    budget_pct: 0
+  - id: triage
+    agent: TriageAgent
+    tier: balanced
+    budget_pct: 35
+  - id: explainer
+    agent: ExplainerAgent
+    tier: fast
+    budget_pct: 18
+  - id: pattern_analysis
+    agent: PatternAgent
+    tier: balanced
+    budget_pct: 12
+  - id: fix_generation
+    agent: FixAgent
+    tier: balanced
+    budget_pct: 25
+edges:
+  - from: ingestion
+    to: sast
+    condition: null
+  - from: ingestion
+    to: secrets
+    condition: null
+  - from: ingestion
+    to: sca
+    condition: null
+  - from: ingestion
+    to: iac
+    condition: null
+  - from: sast
+    to: triage
+    condition: null
+  - from: secrets
+    to: triage
+    condition: null
+  - from: sca
+    to: triage
+    condition: null
+  - from: iac
+    to: triage
+    condition: null
+  - from: triage
+    to: explainer
+    condition: null
+  - from: triage
+    to: pattern_analysis
+    condition: null
+  - from: explainer
+    to: fix_generation
+    condition: null
