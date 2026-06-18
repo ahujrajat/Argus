@@ -21,6 +21,7 @@ dependencies = [
     "sse-starlette>=2.1.0",
     "prometheus-client>=0.20.0",
     "slowapi>=0.1.9",
+    "croniter>=2.0.0",
 ]
 
 [project.optional-dependencies]

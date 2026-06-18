@@ -181,7 +181,7 @@ Yes — the design calls for Argus to run its own scanner suite and produce a Cy
 pytest --ignore=tests/e2e -q
 ```
 
-This runs all 212 unit and integration tests. E2E tests in `tests/e2e/` require a live PostgreSQL connection.
+This runs all 307 unit and integration tests. E2E tests in `tests/e2e/` require a live PostgreSQL connection.
 
 **Q: My test patches the wrong thing and the real scanner runs — what's happening?**
 
@@ -195,3 +195,77 @@ with patch.dict(orch_module._AGENT_REGISTRY, {"SemgrepAdapter": FakeSemgrep}):
 **Q: How does the eval harness work?**
 
 `python evals/harness.py --findings-file <path> --ground-truth evals/fixtures/ground_truth.json` computes precision, recall, FP rate, and F1 against labeled known findings. A ±3 line tolerance is applied for line number matching. FP rate > 40% exits non-zero — wire this to CI to catch regressions.
+
+---
+
+## Suppression Rules (Phase 10)
+
+**Q: How do I suppress a known false positive?**
+
+Three ways:
+
+1. **API** — `POST /api/v1/suppressions` with `pattern_type: "fingerprint"` and the finding's `dedup_key` as `pattern`.
+2. **.argusignore** — Add a line to `.argusignore` at the repo root:
+   ```
+   fp:<dedup_key>        # suppress by fingerprint
+   path:tests/**         # suppress all findings in tests/
+   rule:semgrep.sqli     # suppress a specific rule
+   ```
+3. **Finding status** — `PATCH /api/v1/findings/{id}` with `{"status": "dismissed"}` marks the finding without creating a persistent suppression rule.
+
+**Q: What is the difference between `fingerprint`, `path_glob`, and `rule_id` suppressions?**
+
+- `fingerprint` — exact match on `dedup_key`; most precise; re-suppresses if the finding recurs anywhere
+- `path_glob` — fnmatch on file path; good for suppressing entire directories (`vendor/**`, `tests/**`)
+- `rule_id` — suppresses every finding from a specific rule ID; use when a rule has too many FPs for a given project
+
+**Q: Can suppression rules expire?**
+
+Yes. Provide `expires_at` (ISO 8601 UTC) when creating a rule. `GET /api/v1/suppressions` filters out expired rules by default; pass `?include_expired=true` to see them.
+
+---
+
+## Scheduled Scans (Phase 10)
+
+**Q: How do I schedule a recurring scan?**
+
+```bash
+POST /api/v1/schedules
+{
+  "name": "nightly-main",
+  "cron_expr": "0 2 * * *",
+  "pipeline_config_name": "full-scan",
+  "target_ref": "github.com/org/repo"
+}
+```
+
+Standard 5-field cron (`minute hour day-of-month month day-of-week`). The built-in validator rejects expressions that are not parseable by `croniter`.
+
+**Q: How does the background scheduler work?**
+
+A long-running `asyncio.Task` starts in the FastAPI lifespan and polls every 30 seconds. Any `ScheduledScanRow` whose `next_run_at ≤ now` and `enabled = true` gets a new `ScanRow` created with status `pending`, and `next_run_at` is advanced to the next cron fire time.
+
+**Q: Can I temporarily pause a schedule without deleting it?**
+
+Yes. `PATCH /api/v1/schedules/{id}/disable` sets `enabled = false` and clears `next_run_at`. `PATCH /api/v1/schedules/{id}/enable` re-enables it and recomputes the next fire time from now.
+
+---
+
+## Compliance Report (Phase 10)
+
+**Q: How do I generate a compliance report for a scan?**
+
+`GET /api/v1/scans/{id}/report` returns:
+- `severity_breakdown` — count per severity level (critical / high / medium / low / info)
+- `owasp_top10` — top-10 OWASP categories by finding count
+- `cwe_top10` — top-10 CWE identifiers by finding count
+- `risk_score` — weighted sum (critical×10 + high×5 + medium×2 + low×1)
+- `total_findings` — raw count
+
+**Q: How is the risk score calculated?**
+
+```
+risk_score = (critical × 10) + (high × 5) + (medium × 2) + (low × 1)
+```
+
+Info and negligible findings do not contribute. This is intentionally simple — use it as a relative trend indicator across scans, not an absolute severity measure.
