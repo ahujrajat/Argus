@@ -12,3 +12,4 @@ node_modules/
 surfaces/dashboard/dist/
 surfaces/finrouter-gateway/dist/
 *.sarif
+.DS_Store
