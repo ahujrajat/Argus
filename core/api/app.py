@@ -18,6 +18,8 @@ from core.api.routers.audit import router as audit_router
 from core.api.routers.config import router as config_router
 from core.api.routers.webhooks import router as webhooks_router
 from core.api.routers.auth import router as auth_router
+from core.api.routers.suppressions import router as suppressions_router
+from core.api.routers.schedules import router as schedules_router
 from core.api.sse import scan_event_stream
 from core.governance.events import ScanEventBus, event_bus as _default_bus
 from core.db.seed import seed_pipeline_configs
@@ -33,9 +35,19 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        import asyncio
+        from core.scheduler.runner import scheduler_loop
+
         async with get_session() as session:
             await seed_pipeline_configs(session)
+
+        scheduler_task = asyncio.create_task(scheduler_loop())
         yield
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
     app = FastAPI(title="Argus Security Platform", version="0.2.0", docs_url="/docs", lifespan=lifespan)
 
@@ -61,6 +73,8 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(webhooks_router, prefix="/api/v1")
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(suppressions_router, prefix="/api/v1")
+    app.include_router(schedules_router, prefix="/api/v1")
 
     @app.get("/api/v1/health")
     async def health():

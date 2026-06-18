@@ -250,6 +250,52 @@ async def compare_scans(
     }
 
 
+@router.get("/{scan_id}/report")
+async def compliance_report(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    """OWASP Top 10 + CWE + severity breakdown compliance report."""
+    from collections import Counter
+
+    result = await db.execute(select(ScanRow).where(ScanRow.id == str(scan_id)))
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    findings_result = await db.execute(
+        select(FindingRow).where(FindingRow.scan_id == str(scan_id))
+    )
+    findings = findings_result.scalars().all()
+
+    severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0, "negligible": 0}
+    severity_counts: Counter = Counter()
+    owasp_counts: Counter = Counter()
+    cwe_counts: Counter = Counter()
+
+    for f in findings:
+        severity_counts[f.severity.lower()] += 1
+        if f.owasp_category:
+            owasp_counts[f.owasp_category] += 1
+        if f.cwe:
+            cwe_counts[f.cwe] += 1
+
+    # Risk score: weighted sum (critical=10, high=5, medium=2, low=1)
+    weights = {"critical": 10, "high": 5, "medium": 2, "low": 1}
+    risk_score = sum(weights.get(sev, 0) * cnt for sev, cnt in severity_counts.items())
+
+    return {
+        "scan_id": str(scan_id),
+        "target_ref": row.target_ref,
+        "status": row.status,
+        "total_findings": len(findings),
+        "risk_score": risk_score,
+        "severity_breakdown": dict(severity_counts),
+        "owasp_top10": dict(owasp_counts.most_common(10)),
+        "cwe_top10": dict(cwe_counts.most_common(10)),
+        "generated_at": __import__("datetime").datetime.now(
+            __import__("datetime").timezone.utc
+        ).isoformat(),
+    }
+
+
 @router.delete("/{scan_id}", status_code=200)
 async def cancel_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
     from datetime import datetime, timezone

@@ -133,6 +133,30 @@ class SkillMetaRow(Base):
     approved_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class SuppressionRuleRow(Base):
+    __tablename__ = "suppression_rules"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    pattern_type = Column(String, nullable=False)   # fingerprint | path_glob | rule_id
+    pattern = Column(String, nullable=False)
+    reason = Column(Text, nullable=True)
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ScheduledScanRow(Base):
+    __tablename__ = "scheduled_scans"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    name = Column(String, nullable=False)
+    cron_expr = Column(String, nullable=False)
+    pipeline_config_name = Column(String, nullable=False)
+    target_ref = Column(String, nullable=False)
+    enabled = Column(Boolean, default=True)
+    last_run_at = Column(DateTime(timezone=True), nullable=True)
+    next_run_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=_now)
+
+
 class ApiKeyRow(Base):
     __tablename__ = "api_keys"
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)

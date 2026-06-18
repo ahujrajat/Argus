@@ -315,6 +315,69 @@ GET    /cost/ledger             Per-call cost entries
 GET    /cost/summary            Rolled-up by scan/model/tier
 ```
 
+### SBOM & Diff (Phase 8)
+```
+GET    /scans/{id}/sbom                     CycloneDX 1.5 SBOM for a completed scan
+GET    /scans/{id}/compare/{baseline_id}    Finding diff (new / persisted / resolved)
+```
+
+### Webhooks (Phase 8)
+```
+POST   /webhooks/github    GitHub push / PR webhook (HMAC-SHA256 verified)
+POST   /webhooks/gitlab    GitLab Push Hook / Merge Request Hook (token verified)
+```
+
+### Auth & API Keys (Phase 9)
+```
+POST   /auth/keys           Generate a new API key (returns raw key once)
+GET    /auth/keys           List active keys (requires auth)
+DELETE /auth/keys/{id}      Revoke a key (requires auth)
+```
+
+Authentication: send the raw key in the `Authorization: Bearer <key>` header. The platform stores only the SHA-256 hash. A `ARGUS_MASTER_KEY` environment variable bypasses DB lookup for bootstrapping.
+
+### Suppression Rules (Phase 10)
+```
+POST   /suppressions        Create a suppression rule
+GET    /suppressions        List rules (add ?include_expired=true for expired)
+DELETE /suppressions/{id}   Delete a rule
+```
+
+Supported `pattern_type` values: `fingerprint` (exact dedup_key), `path_glob` (fnmatch), `rule_id` (exact rule identifier). Rules can carry an optional `expires_at` ISO timestamp.
+
+`.argusignore` file format (place at repo root):
+```
+# comment
+path:tests/**           # suppress all findings in tests/
+rule:semgrep.sqli       # suppress a specific rule
+fp:<dedup_key>          # suppress by fingerprint
+vendor/**               # bare pattern = path_glob default
+```
+
+### Scheduled Scans (Phase 10)
+```
+POST   /schedules                   Create a scheduled scan (cron expression)
+GET    /schedules                   List schedules
+GET    /schedules/{id}              Schedule detail
+PATCH  /schedules/{id}/enable       Enable (recomputes next_run_at)
+PATCH  /schedules/{id}/disable      Disable (clears next_run_at)
+DELETE /schedules/{id}              Delete
+```
+
+Cron expressions use standard 5-field format (`"0 2 * * *"` = daily at 02:00 UTC). The background scheduler polls every 30 seconds and enqueues a `ScanRow` for each due schedule.
+
+### Compliance Report (Phase 10)
+```
+GET    /scans/{id}/report    OWASP Top 10 counts, CWE distribution, severity breakdown, risk score
+```
+
+Risk score formula: `critical×10 + high×5 + medium×2 + low×1`.
+
+### Observability (Phase 9)
+```
+GET    /metrics    Prometheus text metrics (counter: scans, findings, cost; histogram: duration)
+```
+
 ---
 
 ## Development
@@ -366,8 +429,11 @@ The test suite is organized by layer:
 tests/
   core/
     agents/          # orchestrator, triage, explainer, fix, pattern, DAST auth
-    api/             # scans, findings, fixes, pipelines, skills, config, audit
+    api/             # scans, findings, fixes, pipelines, skills, config, audit,
+                     # suppressions, schedules, compliance report
     scanners/        # semgrep, trufflehog, grype, checkov, nuclei, zap
+    scheduler/       # background cron runner
+    suppression/     # suppression engine + .argusignore parser
     skills/          # skill loader, selector, creator
     understanding/   # ingestion, diff
     test_db.py       # schema/migration smoke tests
@@ -378,7 +444,7 @@ tests/
 
 Run without a database:
 ```bash
-pytest --ignore=tests/e2e -q   # 212 tests
+pytest --ignore=tests/e2e -q   # 307 tests
 ```
 
 Run everything (needs `docker compose up -d`):
@@ -419,7 +485,9 @@ Ground truth fixture: `evals/fixtures/ground_truth.json` — 4 known findings in
 | 5 | Skills system, PatternAgent, SkillCreatorAgent | Done |
 | 6 | DAST (Nuclei + ZAP), authorization gate | Done |
 | 7 | Audit log API, Config API, eval harness tests | Done |
-| 8+ | TBD — see design spec | Pending |
+| 8 | CycloneDX SBOM export, scan diff API, GitHub/GitLab webhooks, OpenAPI export scripts | Done |
+| 9 | API key auth, Prometheus metrics, notification dispatcher, rate limiting (slowapi) | Done |
+| 10 | Suppression rules (.argusignore), scheduled scans (cron), compliance report, background scheduler | Done |
 
 ---
 
