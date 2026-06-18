@@ -199,3 +199,28 @@ class TargetAuthorizationRow(Base):
     environment = Column(String, default="non-production")
     rate_limits = Column(JSONB, default=dict)
     expires_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class OrgRow(Base):
+    __tablename__ = "orgs"
+    id = Column(String, primary_key=True, default=_uuid)
+    name = Column(String, unique=True, nullable=False)
+    slug = Column(String, unique=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now)
+
+
+class WorkspaceRow(Base):
+    __tablename__ = "workspaces"
+    id = Column(String, primary_key=True, default=_uuid)
+    name = Column(String, nullable=False)
+    org_id = Column(String, ForeignKey("orgs.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now)
+
+
+class OrgMemberRow(Base):
+    __tablename__ = "org_members"
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, ForeignKey("orgs.id"), nullable=False)
+    user_id = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="viewer")
+    created_at = Column(DateTime(timezone=True), default=_now)
