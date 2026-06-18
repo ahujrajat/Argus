@@ -133,6 +133,18 @@ class SkillMetaRow(Base):
     approved_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class ApiKeyRow(Base):
+    __tablename__ = "api_keys"
+    id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    name = Column(String, nullable=False)
+    key_hash = Column(String, nullable=False, unique=True)
+    created_by = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_now)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    revoked = Column(Boolean, default=False)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class TargetAuthorizationRow(Base):
     __tablename__ = "target_authorizations"
     id = Column(UUID(as_uuid=False), primary_key=True, default=_uuid)
