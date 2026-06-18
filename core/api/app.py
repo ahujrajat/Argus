@@ -13,6 +13,7 @@ from core.api.routers.pipelines import router as pipelines_router
 from core.api.routers.skills import router as skills_router
 from core.api.routers.audit import router as audit_router
 from core.api.routers.config import router as config_router
+from core.api.routers.webhooks import router as webhooks_router
 from core.api.sse import scan_event_stream
 from core.governance.events import ScanEventBus, event_bus as _default_bus
 from core.db.seed import seed_pipeline_configs
@@ -46,6 +47,7 @@ def create_app(event_bus: ScanEventBus | None = None) -> FastAPI:
     app.include_router(skills_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
+    app.include_router(webhooks_router, prefix="/api/v1")
 
     @app.get("/api/v1/health")
     async def health():

@@ -172,6 +172,84 @@ async def get_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
             "started_at": row.started_at, "finished_at": row.finished_at}
 
 
+@router.get("/{scan_id}/sbom")
+async def get_scan_sbom(scan_id: UUID, db: AsyncSession = Depends(get_db)):
+    from core.sbom.cyclonedx import build_sbom
+
+    result = await db.execute(select(ScanRow).where(ScanRow.id == str(scan_id)))
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Scan not found")
+
+    findings_result = await db.execute(
+        select(FindingRow).where(FindingRow.scan_id == str(scan_id))
+    )
+    findings = findings_result.scalars().all()
+    findings_dicts = [
+        {
+            "rule_id": f.rule_id,
+            "source_tool": f.source_tool,
+            "cwe": f.cwe,
+            "owasp_category": f.owasp_category,
+            "severity": f.severity,
+            "location": f.location,
+            "dedup_key": f.dedup_key,
+            "explanation": f.explanation,
+        }
+        for f in findings
+    ]
+
+    sbom = build_sbom(
+        scan_id=str(scan_id),
+        target_ref=row.target_ref,
+        findings=findings_dicts,
+    )
+    return sbom
+
+
+@router.get("/{scan_id}/compare/{baseline_scan_id}")
+async def compare_scans(
+    scan_id: UUID,
+    baseline_scan_id: UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    from core.analysis.scan_diff import diff_scans
+
+    async def _fetch(sid: str) -> list[dict]:
+        r = await db.execute(select(FindingRow).where(FindingRow.scan_id == sid))
+        rows = r.scalars().all()
+        return [
+            {
+                "id": f.id,
+                "rule_id": f.rule_id,
+                "source_tool": f.source_tool,
+                "severity": f.severity,
+                "dedup_key": f.dedup_key,
+                "location": f.location,
+                "explanation": f.explanation,
+            }
+            for f in rows
+        ]
+
+    for sid, label in [(str(scan_id), "scan_id"), (str(baseline_scan_id), "baseline_scan_id")]:
+        r = await db.execute(select(ScanRow).where(ScanRow.id == sid))
+        if not r.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail=f"{label} not found")
+
+    baseline_findings = await _fetch(str(baseline_scan_id))
+    current_findings = await _fetch(str(scan_id))
+
+    result = diff_scans(baseline=baseline_findings, current=current_findings)
+    return {
+        "scan_id": str(scan_id),
+        "baseline_scan_id": str(baseline_scan_id),
+        "summary": result.summary(),
+        "new": result.new_findings,
+        "persisted": result.persisted_findings,
+        "resolved": result.resolved_findings,
+    }
+
+
 @router.delete("/{scan_id}", status_code=200)
 async def cancel_scan(scan_id: UUID, db: AsyncSession = Depends(get_db)):
     from datetime import datetime, timezone
