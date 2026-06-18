@@ -3,7 +3,7 @@ import re
 import hashlib
 
 _SECRET_PATTERNS = [
-    re.compile(r"sk-ant-api\d{2}-[A-Za-z0-9_\-]{12,}"),
+    re.compile(r"sk-ant-[A-Za-z0-9_\-]{10,}"),
     re.compile(r"sk-proj-[A-Za-z0-9_\-]{20,}"),
     re.compile(r"sk-[A-Za-z0-9]{20,}"),
     re.compile(r"ghp_[A-Za-z0-9]{36}"),
