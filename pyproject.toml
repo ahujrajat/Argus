@@ -19,6 +19,8 @@ dependencies = [
     "structlog>=24.1.0",
     "python-multipart>=0.0.9",
     "sse-starlette>=2.1.0",
+    "prometheus-client>=0.20.0",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
