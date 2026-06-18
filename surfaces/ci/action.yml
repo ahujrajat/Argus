@@ -1,0 +1,46 @@
+name: Argus Security Scan
+description: Run an Argus AI security scan and gate on severity thresholds
+
+inputs:
+  argus_api_base:
+    description: 'Base URL of the Argus API server'
+    required: false
+    default: 'http://localhost:8000'
+  target:
+    description: 'Scan target — local path or github.com/org/repo@branch'
+    required: true
+  mode:
+    description: 'Scan mode: at_rest or real_time'
+    required: false
+    default: 'at_rest'
+  approach:
+    description: 'Security approach'
+    required: false
+    default: 'penetration_testing'
+  pipeline:
+    description: 'Pipeline config name'
+    required: false
+    default: 'full-scan'
+  fail_on:
+    description: 'Comma-separated severity levels that fail the step'
+    required: false
+    default: 'critical,high'
+  timeout_sec:
+    description: 'Maximum seconds to wait for scan completion'
+    required: false
+    default: '600'
+
+runs:
+  using: composite
+  steps:
+    - name: Run Argus scan
+      shell: bash
+      env:
+        ARGUS_API_BASE: ${{ inputs.argus_api_base }}
+        ARGUS_TARGET: ${{ inputs.target }}
+        ARGUS_MODE: ${{ inputs.mode }}
+        ARGUS_APPROACH: ${{ inputs.approach }}
+        ARGUS_PIPELINE: ${{ inputs.pipeline }}
+        ARGUS_FAIL_ON: ${{ inputs.fail_on }}
+        ARGUS_TIMEOUT_SEC: ${{ inputs.timeout_sec }}
+      run: ${{ github.action_path }}/argus-scan.sh
